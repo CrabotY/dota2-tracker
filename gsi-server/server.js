@@ -430,9 +430,10 @@ const AI_PROVIDERS = {
 
 const prettyName = (n, pre) => (n && n !== 'empty' ? n.replace(pre, '').replace(/_/g, ' ') : null);
 
-// Hero lineups from the GSI draft block (when present).
+// Picks + bans per team from the GSI draft block (when present — populated in
+// ranked/draft modes during hero selection).
 function parseDraft(draft) {
-  const out = { radiant: [], dire: [] };
+  const out = { radiant: { picks: [], bans: [] }, dire: { picks: [], bans: [] } };
   if (!draft || typeof draft !== 'object') return out;
   const teamOf = { team2: 'radiant', radiant: 'radiant', team3: 'dire', dire: 'dire' };
   for (const k of Object.keys(draft)) {
@@ -440,7 +441,11 @@ function parseDraft(draft) {
     const sub = draft[k];
     if (!team || !sub || typeof sub !== 'object') continue;
     for (const f of Object.keys(sub)) {
-      if (/^pick\d+_id$/.test(f) && sub[f] && heroesCache[sub[f]]) out[team].push(heroesCache[sub[f]]);
+      const pick = /^pick\d+_id$/.test(f);
+      const ban = /^ban\d+_id$/.test(f);
+      if ((pick || ban) && sub[f] && heroesCache[sub[f]]) {
+        out[team][pick ? 'picks' : 'bans'].push(heroesCache[sub[f]]);
+      }
     }
   }
   return out;
@@ -469,16 +474,26 @@ function buildAIContext() {
     if (o.team === myTeamNum) { if (o.name !== h.name && !seenAllies.includes(hn)) seenAllies.push(hn); }
     else if ((o.team === 2 || o.team === 3) && !seenEnemies.includes(hn)) seenEnemies.push(hn);
   }
-  const lines = [
-    `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${map.game_state || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
+  const gs = map.game_state || '';
+  const isDraft = /HERO_SELECTION|STRATEGY_TIME|CUSTOM_GAME_SETUP/.test(gs);
+  const myTeam = p.team_name || (myTeamNum === 3 ? 'dire' : 'radiant');
+  const draftLine = (t.radiant.picks.length || t.dire.picks.length || t.radiant.bans.length || t.dire.bans.length)
+    ? `Пики — Radiant: ${t.radiant.picks.join(', ') || '—'}; Dire: ${t.dire.picks.join(', ') || '—'}.`
+      + ` Баны — Radiant: ${t.radiant.bans.join(', ') || '—'}; Dire: ${t.dire.bans.join(', ') || '—'}.`
+    : null;
+
+  const lines = isDraft ? [
+    `>>> ИДЁТ ВЫБОР ГЕРОЕВ (драфт). Моя команда: ${myTeam}. Помоги с пиком: контрпики против врага, синергия с союзниками, какая роль не закрыта, кого забанить. <<<`,
+    draftLine || 'Пики/баны пока не видны (возможно All Pick без структурированного драфта) — советуй по героям, которых назову, и по мете.',
+    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || 'ещё не выбран'}.`,
+  ] : [
+    `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${gs || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
     `Счёт: Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
-    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'} (${p.team_name || '?'}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
+    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'} (${myTeam}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
     `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`,
     `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
     abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
-    (t.radiant.length || t.dire.length)
-      ? `Пики — Radiant: ${t.radiant.join(', ') || '?'}; Dire: ${t.dire.join(', ') || '?'}.`
-      : null,
+    draftLine,
     seenEnemies.length ? `Сейчас видны на карте враги: ${seenEnemies.join(', ')}.` : null,
     seenAllies.length ? `Видны союзники: ${seenAllies.join(', ')}.` : null,
   ];
@@ -492,7 +507,11 @@ const SYSTEM_PROMPT =
   'ВАЖНО: если в вопросе или пиках назван герой врага — сразу давай по нему чёткий ' +
   'совет по знанию Доты (предметы, тайминги, как играть). НЕ пиши, что у тебя нет ' +
   'информации о противниках, не извиняйся и не проси уточнений без необходимости — ' +
-  'просто дай лучший практический ответ. Помни предыдущие сообщения диалога. ' +
+  'просто дай лучший практический ответ. ' +
+  'Если в контексте указано, что ИДЁТ ВЫБОР ГЕРОЕВ (драфт) — давай советы по пику: ' +
+  'предложи 2-3 конкретных героя как контрпик против вражеских пиков, учитывай ' +
+  'синергию с союзниками, подскажи какую роль/позицию стоит закрыть и кого забанить, ' +
+  'кратко объясни почему. Помни предыдущие сообщения диалога. ' +
   'Точные предметы врагов в реальном времени недоступны (Dota их не отдаёт). ' +
   'Если спрашивают про инвентарь/билд врага — ОЦЕНИ вероятную сборку по герою и ' +
   'минуте игры (типичный билд на этом тайминге) и пометь, что это оценка; не ' +
