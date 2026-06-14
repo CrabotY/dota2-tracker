@@ -42,7 +42,8 @@
     "publish": {
       "provider": "github",
       "owner": "CrabotY",
-      "repo": "dota2-tracker"
+      "repo": "dota2-tracker",
+      "releaseType": "release"
     }
   },
   "dependencies": {
