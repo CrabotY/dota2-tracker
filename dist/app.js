@@ -53,6 +53,7 @@ const STATUS_FLAGS = [
 ];
 
 let lastState = null;
+let meLoaded = false;
 
 function render(s) {
   lastState = s;
@@ -169,7 +170,11 @@ function connect() {
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.type === 'state') render(m.payload);
+    if (m.type === 'state') {
+      render(m.payload);
+      // Once a match is feeding data, the server can identify "me" — refresh it.
+      if (!meLoaded) { meLoaded = true; loadMe(); }
+    }
   };
 }
 connect();
@@ -192,11 +197,41 @@ $('btn-ai').onclick = async () => {
 };
 
 // ── Scouting ─────────────────────────────────────────────────────────────────
-const rankName = (t) => {
-  if (!t) return '—';
-  const med = ['Herald','Guardian','Crusader','Archon','Legend','Ancient','Divine','Immortal'];
-  return `${med[Math.floor(t / 10) - 1] || '?'} ${t % 10 || ''}`.trim();
-};
+const MEDALS = ['Herald','Guardian','Crusader','Archon','Legend','Ancient','Divine','Immortal'];
+function rankName(t) {
+  if (!t) return 'Без ранга';
+  const medal = MEDALS[Math.floor(t / 10) - 1];
+  if (!medal) return 'Без ранга';
+  const stars = t % 10;
+  return `${medal}${stars ? ' ' + stars : ''}`;
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function profileHTML(p) {
+  if (!p || p.error) return `<div class="muted">${esc(p?.error) || 'Профиль не найден'}</div>`;
+  const wrCls = p.winrate == null ? '' : p.winrate >= 50 ? 'wr-good' : 'wr-bad';
+  return `
+    <div class="profile-card">
+      ${p.avatar ? `<img src="${esc(p.avatar)}" alt="" />` : '<div class="profile-noavatar">🧍</div>'}
+      <div class="profile-meta">
+        <div class="profile-name">${esc(p.name) || '—'}</div>
+        <div class="profile-sub"><span class="rank-pill">${esc(rankName(p.rank))}</span> WR <span class="${wrCls}">${p.winrate ?? '—'}%</span> <span class="muted">(${p.totalGames || 0} игр)</span></div>
+        ${p.avgKDA ? `<div class="profile-sub muted">Ø KDA ${p.avgKDA.k}/${p.avgKDA.d}/${p.avgKDA.a} · GPM ${p.avgGPM} · XPM ${p.avgXPM}</div>` : ''}
+      </div>
+    </div>
+    ${(p.topHeroes || []).length ? '<div class="mini-title">Топ герои</div>' + p.topHeroes.map((h) =>
+      `<div class="top-hero"><span>${esc(h.name)}</span><span class="muted">${h.games} игр · <b class="${h.winrate >= 50 ? 'wr-good' : 'wr-bad'}">${h.winrate}%</b></span></div>`).join('') : ''}`;
+}
+
+async function loadMe() {
+  const box = $('me-result');
+  try {
+    const r = await fetch(`${API}/me`);
+    if (!r.ok) { const e = await r.json().catch(() => ({})); box.innerHTML = `<div class="muted">${esc(e.error) || 'Аккаунт ещё не определён'}</div>`; return; }
+    box.innerHTML = profileHTML(await r.json());
+  } catch (e) { box.innerHTML = `<div class="muted">Сервер недоступен</div>`; }
+}
+
 async function scout(q) {
   const box = $('scout-result'); box.innerHTML = '<div class="muted">Ищу…</div>';
   try {
@@ -207,20 +242,12 @@ async function scout(q) {
       id = sr[0].account_id;
     }
     const p = await (await fetch(`${API}/profile/${id}`)).json();
-    if (!p || p.error) { box.innerHTML = '<div class="muted">Профиль не найден</div>'; return; }
-    const wrCls = p.winrate >= 50 ? 'wr-good' : 'wr-bad';
-    box.innerHTML = `
-      <div class="profile-card">
-        ${p.avatar ? `<img src="${p.avatar}" />` : ''}
-        <div>
-          <div class="profile-name">${p.name || '—'}</div>
-          <div class="profile-sub">${rankName(p.rank)} · WR <span class="${wrCls}">${p.winrate ?? '—'}%</span> (${p.totalGames || 0} игр)</div>
-          ${p.avgKDA ? `<div class="profile-sub">Сред. KDA ${p.avgKDA.k}/${p.avgKDA.d}/${p.avgKDA.a} · GPM ${p.avgGPM} · XPM ${p.avgXPM}</div>` : ''}
-        </div>
-      </div>
-      <div class="card-title">Топ герои</div>
-      ${(p.topHeroes || []).map((h) => `<div class="top-hero"><span>${h.name}</span><span class="muted">${h.games} игр · ${h.winrate}%</span></div>`).join('') || '<div class="muted">—</div>'}`;
-  } catch (e) { box.innerHTML = `<div class="muted">Ошибка: ${e.message}</div>`; }
+    box.innerHTML = profileHTML(p);
+  } catch (e) { box.innerHTML = `<div class="muted">Ошибка: ${esc(e.message)}</div>`; }
 }
 $('scout-go').onclick = () => { const v = $('scout-input').value; if (v.trim()) scout(v); };
 $('scout-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('scout-go').click(); });
+
+// Auto-load "me" once on start, and refresh when opening the Scout tab.
+loadMe();
+document.querySelector('.tab[data-tab="scout"]').addEventListener('click', loadMe);

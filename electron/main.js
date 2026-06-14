@@ -210,7 +210,11 @@ code{background:#1e2535;padding:2px 6px;border-radius:3px;color:#c8d0e0}
       <div class="notes" id="release-notes"></div></div>
   </div>
   <div class="section"><div class="section-title">Ключи API (опционально)</div>
-    <div class="card"><div class="card-label" style="margin-bottom:8px">Steam Web API Key — для live-таблицы матча</div>
+    <div class="card" style="background:rgba(74,222,128,.06);border-color:rgba(74,222,128,.2)">
+      <div class="card-label">✓ Твой Steam-аккаунт определяется автоматически</div>
+      <div class="card-sub">Из локального логина Steam и из данных матча (GSI) — вводить ничего не нужно.</div></div>
+    <div class="card"><div class="card-label" style="margin-bottom:4px">Steam Web API Key — опционально</div>
+      <div class="card-sub" style="margin-bottom:8px">Только для полной таблицы матча через Valve. Сам ключ Valve не отдаёт локально — его нужно один раз скопировать со страницы. Без него всё работает (OpenDota + GSI).</div>
       <input class="input" type="password" id="steam-key" placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX">
       <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
         <a class="link" onclick="openExternal('https://steamcommunity.com/dev/apikey');return false">Получить ключ →</a>

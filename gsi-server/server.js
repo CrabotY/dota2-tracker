@@ -16,6 +16,7 @@ const express = require('express');
 const http    = require('http');
 const axios   = require('axios');
 const { WebSocketServer } = require('ws');
+const { findSteamId, steam64ToAccountId } = require('../lib/steam-id');
 
 const app    = express();
 const server = http.createServer(app);
@@ -38,6 +39,23 @@ let currentState   = null;   // full enriched GSI snapshot (live)
 let playerCache    = {};
 let heroesCache    = {};
 let currentMatchId = null;
+
+// ─── Кто "я" — определяется автоматически ─────────────────────────────────────
+// Приоритет: account id из живого GSI > SteamID из локального логина Steam.
+let liveAccountId  = null;   // из текущего матча (GSI)
+let localAccountId = null;   // из <steam>/config/loginusers.vdf
+function detectLocalSteam() {
+  try {
+    const sid = findSteamId();
+    if (sid) {
+      localAccountId = steam64ToAccountId(sid);
+      console.log(`[Steam] Аккаунт определён автоматически: ${localAccountId} (SteamID ${sid})`);
+    } else {
+      console.log('[Steam] Не удалось определить аккаунт из Steam — заработает по данным матча.');
+    }
+  } catch (e) { console.error('[Steam] detect:', e.message); }
+}
+function myAccountId() { return liveAccountId || localAccountId; }
 
 // ─── WebSocket: live push to the overlay ──────────────────────────────────────
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -276,6 +294,12 @@ app.post('/gsi', (req, res) => {
   }
 
   currentState = enrich(body);
+
+  // Learn who "I" am from the live feed (works even without any Steam key).
+  const pl = body.player || {};
+  if (pl.accountid) liveAccountId = String(pl.accountid);
+  else if (pl.steamid) liveAccountId = steam64ToAccountId(pl.steamid);
+
   const matchId = body.map?.matchid;
   if (matchId && matchId !== currentMatchId && matchId !== '0') {
     currentMatchId = matchId;
@@ -288,7 +312,16 @@ app.post('/gsi', (req, res) => {
 });
 
 app.get('/state',   (req, res) => res.json(currentState || { gameState: 'WAITING' }));
-app.get('/health',  (req, res) => res.json({ ok: true, matchId: currentMatchId, browsers: wss.clients.size }));
+app.get('/health',  (req, res) => res.json({ ok: true, matchId: currentMatchId, browsers: wss.clients.size, me: myAccountId() }));
+
+// «Я» — автоматически определённый профиль текущего игрока (без ручного ввода).
+app.get('/me', async (req, res) => {
+  const id = myAccountId();
+  if (!id) return res.status(404).json({ error: 'Аккаунт ещё не определён — зайди в матч или открой Steam.' });
+  const profile = await fetchPlayerProfile(id);
+  if (!profile) return res.status(404).json({ error: 'Профиль не найден' });
+  res.json({ ...profile, source: liveAccountId ? 'gsi' : 'steam' });
+});
 
 app.get('/profile/:id', async (req, res) => {
   const raw = req.params.id;
@@ -370,6 +403,7 @@ server.listen(PORT, () => {
   console.log('╚═══════════════════════════════════════╝');
   console.log('');
   loadHeroes();
+  detectLocalSteam();
 });
 
 module.exports = {};
