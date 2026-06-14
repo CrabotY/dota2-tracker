@@ -395,6 +395,16 @@ app.post('/ai/analyze', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.response?.data?.error?.message || e.message }); }
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[FATAL] Порт ${PORT} занят — вероятно, уже запущен другой Dota 2 Tracker ` +
+      `(или старая версия). Закрой его в трее и перезапусти. Сервер не стартовал.`);
+  } else {
+    console.error('[FATAL] Сервер не смог запуститься:', err.message);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log('');
   console.log('╔═══════════════════════════════════════╗');

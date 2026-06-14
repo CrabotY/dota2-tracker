@@ -158,19 +158,39 @@ function renderBuildings(b) {
 }
 
 // ── WebSocket (live) ─────────────────────────────────────────────────────────
-function setConn(on) {
-  $('conn').className = `conn ${on ? 'conn--on' : 'conn--off'}`;
-  $('conn-text').textContent = on ? 'live' : '…';
+// Three distinct states so "waiting" is never a black box:
+//   off    — tracker server unreachable (server crashed / port busy)
+//   server — connected to the server, but Dota hasn't sent any GSI yet
+//   live   — GSI data is flowing
+function setConn(state) {
+  const el = $('conn');
+  el.className = 'conn conn--' + state;
+  $('conn-text').textContent = state === 'live' ? 'live' : state === 'server' ? 'жду Dota' : 'нет связи';
+  // Update the waiting screen's status line to match.
+  const ws = $('wait-status'), sub = $('wait-sub');
+  if (!ws) return;
+  if (state === 'off') {
+    ws.textContent = '✕ Трекер-сервер недоступен';
+    ws.className = 'wait-status ws-off';
+    if (sub) sub.textContent = 'Сервер не запущен или порт 3001 занят. Открой Логи (▤) — там причина.';
+  } else if (state === 'server') {
+    ws.textContent = '✓ Сервер работает · ждём данные от Dota';
+    ws.className = 'wait-status ws-server';
+    if (sub) sub.textContent = 'Зайди в матч, бот-игру или демо героя.';
+  }
 }
 let ws;
 function connect() {
   ws = new WebSocket(WS);
-  ws.onopen = () => setConn(true);
-  ws.onclose = () => { setConn(false); setTimeout(connect, 1500); };
+  ws.onopen = () => setConn('server');
+  ws.onclose = () => { setConn('off'); setTimeout(connect, 1500); };
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.type === 'state') {
+    if (m.type === 'waiting') {
+      setConn('server'); // server up, no Dota data yet
+    } else if (m.type === 'state') {
+      setConn('live');
       render(m.payload);
       // Once a match is feeding data, the server can identify "me" — refresh it.
       if (!meLoaded) { meLoaded = true; loadMe(); }

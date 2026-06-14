@@ -30,7 +30,13 @@
   <main id="tab-match" class="tabpane">
     <section id="waiting" class="waiting">
       <div class="wait-title">Ожидание Dota 2…</div>
-      <div class="wait-sub">Зайди в матч, бот-игру или демо героя.<br>Конфиг GSI ставится автоматически — если только что поставили, <b>перезапусти Dota</b>.</div>
+      <div id="wait-status" class="wait-status"></div>
+      <div class="wait-sub" id="wait-sub">Зайди в матч, бот-игру или демо героя.</div>
+      <div class="wait-tip">
+        <b>Уже в игре, а тут пусто?</b><br>
+        Dota читает GSI-конфиг только при запуске — <b>полностью перезапусти Dota</b>
+        (выйди из клиента и открой заново), затем зайди в матч.
+      </div>
     </section>
 
     <div id="live" class="hidden">
