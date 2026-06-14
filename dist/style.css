@@ -175,6 +175,9 @@ b { font-weight: 700; }
 .ai-clear { -webkit-app-region: no-drag; font-size: 11px; padding: 4px 10px; border-radius: 7px;
   background: var(--panel-2); border: 1px solid var(--border); color: var(--dim); cursor: pointer; }
 .ai-clear:hover { color: var(--text); border-color: var(--border-strong); }
+.ai-mode { -webkit-app-region: no-drag; margin-left: auto; margin-right: 6px; font-size: 11px;
+  padding: 4px 8px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; outline: none; }
 .ai-chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; }
 .ai-chat::-webkit-scrollbar { width: 5px; }
 .ai-chat::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }

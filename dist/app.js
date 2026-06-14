@@ -258,7 +258,7 @@ async function sendAI(question) {
   try {
     const r = await fetch(`${API}/ai`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: aiHistory }),
+      body: JSON.stringify({ messages: aiHistory, mode: ($('ai-mode') || {}).value || 'normal' }),
     });
     const data = await r.json();
     aiBusy = false;
@@ -284,6 +284,12 @@ $('ai-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAI
 $('ai-clear').onclick = () => { aiHistory.length = 0; renderChat(); };
 document.querySelectorAll('.ai-chip').forEach((c) => { c.onclick = () => sendAI(c.dataset.q); });
 document.querySelector('.tab[data-tab="ai"]').addEventListener('click', refreshAiProvider);
+// Remember the game-mode choice (affects AI timing advice).
+try {
+  const saved = localStorage.getItem('aiMode');
+  if (saved) $('ai-mode').value = saved;
+  $('ai-mode').onchange = () => { try { localStorage.setItem('aiMode', $('ai-mode').value); } catch {} };
+} catch {}
 
 // ── Scouting ─────────────────────────────────────────────────────────────────
 const MEDALS = ['Herald','Guardian','Crusader','Archon','Legend','Ancient','Divine','Immortal'];

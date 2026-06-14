@@ -556,25 +556,35 @@ app.get('/ai/info', (req, res) => {
   res.json({ provider, label: AI_PROVIDERS[provider].label, hasKey: !!env[AI_PROVIDERS[provider].envKey] });
 });
 
-// Chat endpoint. Body: { messages: [{role,content}, ...] } — full conversation.
+// Turbo changes pacing a lot, so the AI must know to shift its timings.
+const TURBO_NOTE =
+  'РЕЖИМ ИГРЫ: ТУРБО. Экономика ~2x (золото и опыт быстрее), предметы собираются ' +
+  'примерно вдвое раньше, выкуп (buyback) дешевле и быстрее откатывается, респаун ' +
+  'короче, башни слабее, курьер бесплатный и быстрый. Давай советы С ПОПРАВКОЙ НА ' +
+  'ТУРБО: более ранние тайминги предметов и спайков, агрессивнее по карте. Высокий ' +
+  'GPM (600–1200+) здесь НОРМА — не считай это показателем перевеса.';
+
+// Chat endpoint. Body: { messages: [{role,content}...], mode: 'normal'|'turbo' }.
 app.post('/ai', async (req, res) => {
+  const mode = req.body?.mode === 'turbo' ? 'turbo' : 'normal';
   const messages = Array.isArray(req.body?.messages) ? req.body.messages : null;
   if (!messages || !messages.length) {
     // Backward-compat: single question.
-    if (req.body?.question) return aiRespond(res, [{ role: 'user', content: String(req.body.question) }]);
+    if (req.body?.question) return aiRespond(res, [{ role: 'user', content: String(req.body.question) }], mode);
     return res.status(400).json({ error: 'Пустой запрос' });
   }
-  return aiRespond(res, messages.slice(-20)); // keep last 20 turns of history
+  return aiRespond(res, messages.slice(-20), mode); // keep last 20 turns of history
 });
 
-async function aiRespond(res, history) {
+async function aiRespond(res, history, mode) {
   const env = userEnv();
   const provider = AI_PROVIDERS[env.AI_PROVIDER] ? env.AI_PROVIDER : 'openai';
   const key = env[AI_PROVIDERS[provider].envKey];
   if (!key) {
     return res.status(503).json({ error: `Ключ для «${AI_PROVIDERS[provider].label}» не задан — добавь его в настройках ⚙.` });
   }
-  const system = `${SYSTEM_PROMPT}\n\nКОНТЕКСТ МАТЧА (актуальный):\n${buildAIContext()}`;
+  const turbo = mode === 'turbo' ? `\n\n${TURBO_NOTE}` : '';
+  const system = `${SYSTEM_PROMPT}${turbo}\n\nКОНТЕКСТ МАТЧА (актуальный):\n${buildAIContext()}`;
   try {
     const text = await callProvider(provider, key, system,
       history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') })));
