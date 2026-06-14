@@ -201,6 +201,15 @@ connect();
 const aiHistory = [];          // [{role:'user'|'assistant', content}]
 let aiBusy = false;
 
+// Render an AI message: escape HTML, turn **bold** into real bold, drop stray
+// asterisks, keep line breaks. (`esc` is defined below; used here at runtime.)
+function fmtMsg(s) {
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/\*\*/g, '')
+    .replace(/\n/g, '<br>');
+}
+
 function renderChat() {
   const box = $('ai-chat');
   if (!aiHistory.length) {
@@ -208,7 +217,7 @@ function renderChat() {
     return;
   }
   box.innerHTML = aiHistory.map((m) =>
-    `<div class="ai-msg ai-msg--${m.role === 'user' ? 'me' : 'bot'}">${esc(m.content).replace(/\n/g, '<br>')}</div>`
+    `<div class="ai-msg ai-msg--${m.role === 'user' ? 'me' : 'bot'}">${fmtMsg(m.content)}</div>`
   ).join('') + (aiBusy ? '<div class="ai-msg ai-msg--bot ai-typing">…</div>' : '');
   box.scrollTop = box.scrollHeight;
 }

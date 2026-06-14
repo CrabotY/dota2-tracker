@@ -38,6 +38,7 @@ const OPENDOTA = 'https://api.opendota.com/api';
 let currentState   = null;   // full enriched GSI snapshot (live)
 let playerCache    = {};
 let heroesCache    = {};
+let itemCostCache  = {};     // item short-name -> gold cost (from OpenDota)
 let currentMatchId = null;
 
 // ─── Кто "я" — определяется автоматически ─────────────────────────────────────
@@ -81,14 +82,43 @@ function enrich(raw) {
       ? (p.kills + (p.assists || 0)).toFixed(1)
       : ((p.kills + (p.assists || 0)) / d).toFixed(2);
   }
-  out.derived.netWorth = typeof p.net_worth === 'number' ? p.net_worth
-    : (typeof p.gold === 'number' ? p.gold : 0);
+  out.derived.netWorth = computeNetWorth(raw);
   if (h && typeof h.alive === 'boolean') {
     out.derived.alive = h.alive;
     out.derived.respawnSeconds = h.respawn_seconds || 0;
   }
   out.derived.receivedAt = Date.now();
   return out;
+}
+
+// GSI does NOT send net worth, so we compute it: current gold + value of every
+// carried item (inventory + backpack + stash + neutral). Item costs come from
+// OpenDota. Until they load, this is just gold (same as before).
+function computeNetWorth(raw) {
+  const gold = (raw.player && typeof raw.player.gold === 'number') ? raw.player.gold : 0;
+  let itemsValue = 0;
+  const items = raw.items || {};
+  for (const k of Object.keys(items)) {
+    const name = items[k] && items[k].name;
+    if (!name || name === 'empty') continue;
+    const cost = itemCostCache[name.replace(/^item_/, '')];
+    if (typeof cost === 'number') itemsValue += cost;
+  }
+  return gold + itemsValue;
+}
+
+async function loadItemCosts() {
+  try {
+    const { data } = await axios.get(`${OPENDOTA}/constants/items`, { timeout: 10000 });
+    let n = 0;
+    for (const key of Object.keys(data || {})) {
+      const c = data[key] && data[key].cost;
+      if (typeof c === 'number') { itemCostCache[key] = c; n++; }
+    }
+    console.log(`[OpenDota] Загружено ${n} цен предметов (для нетворса)`);
+  } catch (e) {
+    console.error('[OpenDota] Цены предметов:', e.message);
+  }
 }
 
 // ─── Герои ────────────────────────────────────────────────────────────────────
@@ -437,17 +467,21 @@ function buildAIContext() {
     abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
     (t.radiant.length || t.dire.length)
       ? `Пики — Radiant: ${t.radiant.join(', ') || '?'}; Dire: ${t.dire.join(', ') || '?'}.`
-      : 'Составы команд GSI в обычном матче не отдаёт (только мои данные и пики из драфта). Опирайся на героев, названных в вопросе.',
-    'Точные предметы/статы союзников и врагов в реальном времени недоступны — используй знание Доты и пики.',
+      : null,
   ];
   return lines.filter(Boolean).join('\n');
 }
 
 const SYSTEM_PROMPT =
-  'Ты — опытный тренер по Dota 2. Отвечай на русском, конкретно и кратко: списком, ' +
-  'с эмодзи. Учитывай контекст матча (минута, мои статы, предметы, пики). Для вопросов ' +
-  'про контр-пики и предметы называй конкретные айтемы/таланты и кратко почему. Если ' +
-  'данных мало — дай лучший совет по знанию Доты. Помни предыдущие сообщения диалога.';
+  'Ты — опытный тренер по Dota 2. Отвечай на русском, уверенно, конкретно и кратко: ' +
+  'списком, с эмодзи. Учитывай контекст матча (минута, мои статы, предметы, пики). ' +
+  'Про контр-пики и предметы называй конкретные айтемы/таланты и кратко почему. ' +
+  'ВАЖНО: если в вопросе или пиках назван герой врага — сразу давай по нему чёткий ' +
+  'совет по знанию Доты (предметы, тайминги, как играть). НЕ пиши, что у тебя нет ' +
+  'информации о противниках, не извиняйся и не проси уточнений без необходимости — ' +
+  'просто дай лучший практический ответ. Помни предыдущие сообщения диалога. ' +
+  'НЕ используй markdown-разметку: никаких ** ** , ## , -- — только обычный текст, ' +
+  'эмодзи и переносы строк.';
 
 // Provider dispatch. `history` = [{role:'user'|'assistant', content}], newest last.
 async function callProvider(provider, key, system, history) {
@@ -525,6 +559,7 @@ server.listen(PORT, () => {
   console.log('╚═══════════════════════════════════════╝');
   console.log('');
   loadHeroes();
+  loadItemCosts();
   detectLocalSteam();
 });
 
