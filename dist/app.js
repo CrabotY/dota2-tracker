@@ -115,7 +115,7 @@ const WORLD_MIN = -8200, WORLD_RANGE = 16400;
 function renderMinimap(minimap, myHeroName, myTeam) {
   const el = $('minimap');
   if (!minimap || typeof minimap !== 'object' || !Object.keys(minimap).length) {
-    el.innerHTML = '<div class="mm-empty">нет данных карты</div>';
+    el.innerHTML = '<div class="mm-empty">нет данных карты —<br>перезапусти Dota (нужен обновлённый GSI-конфиг)</div>';
     return;
   }
   const myTeamNum = myTeam === 'dire' ? 3 : 2; // radiant = 2, dire = 3
@@ -133,7 +133,7 @@ function renderMinimap(minimap, myHeroName, myTeam) {
     else cls = 'mm-dot mm-neutral';
     dots.push(`<i class="${cls}" style="left:${left}%;top:${top}%"></i>`);
   }
-  el.innerHTML = dots.length ? dots.join('') : '<div class="mm-empty">нет данных карты</div>';
+  el.innerHTML = dots.length ? dots.join('') : '<div class="mm-empty">нет данных карты —<br>перезапусти Dota (нужен обновлённый GSI-конфиг)</div>';
 }
 
 function renderItems(items) {

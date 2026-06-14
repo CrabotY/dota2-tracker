@@ -40,6 +40,10 @@ let playerCache    = {};
 let heroesCache    = {};
 let itemCostCache  = {};     // item short-name -> gold cost (from OpenDota)
 let currentMatchId = null;
+// Heroes seen this match (accumulated — survives fog of war). Allies are always
+// on the minimap; enemies get added once spotted. Reset on a new match.
+let seenHeroes = { allies: new Set(), enemies: new Set() };
+let minimapEverSeen = false; // false => GSI cfg likely lacks minimap (restart Dota)
 
 // ─── Кто "я" — определяется автоматически ─────────────────────────────────────
 // Приоритет: account id из живого GSI > SteamID из локального логина Steam.
@@ -334,15 +338,34 @@ app.post('/gsi', (req, res) => {
   if (matchId && matchId !== currentMatchId && matchId !== '0') {
     currentMatchId = matchId;
     playerCache = {};
+    seenHeroes = { allies: new Set(), enemies: new Set() };
     console.log(`[GSI] Новый матч: ${currentMatchId}`);
   }
+  accumulateSeenHeroes(body);
   // Push the full live state to every open overlay.
   broadcast({ type: 'state', payload: currentState });
   res.sendStatus(200);
 });
 
+// Remember every hero spotted on the minimap this match (fog-proof lineup).
+function accumulateSeenHeroes(body) {
+  const mm = body.minimap;
+  if (!mm || typeof mm !== 'object') return;
+  minimapEverSeen = true;
+  const myTeamNum = body.player?.team_name === 'dire' ? 3 : 2;
+  const myHero = body.hero?.name;
+  for (const k of Object.keys(mm)) {
+    const o = mm[k];
+    if (!o || !String(o.name || '').startsWith('npc_dota_hero_')) continue;
+    if (o.name === myHero) continue;
+    const hn = prettyName(o.name, /^npc_dota_hero_/);
+    if (o.team === myTeamNum) seenHeroes.allies.add(hn);
+    else if (o.team === 2 || o.team === 3) seenHeroes.enemies.add(hn);
+  }
+}
+
 app.get('/state',   (req, res) => res.json(currentState || { gameState: 'WAITING' }));
-app.get('/health',  (req, res) => res.json({ ok: true, matchId: currentMatchId, browsers: wss.clients.size, me: myAccountId() }));
+app.get('/health',  (req, res) => res.json({ ok: true, matchId: currentMatchId, browsers: wss.clients.size, me: myAccountId(), minimap: minimapEverSeen }));
 
 // «Я» — автоматически определённый профиль текущего игрока (без ручного ввода).
 app.get('/me', async (req, res) => {
@@ -463,17 +486,21 @@ function buildAIContext() {
   const abilities = Object.keys(s.abilities || {}).filter(k => k.startsWith('ability'))
     .map(k => { const a = s.abilities[k]; return a?.name ? `${a.name.replace(/_/g, ' ')} (ур.${a.level})` : null; }).filter(Boolean);
   const t = parseDraft(s.draft);
-  // Visible heroes from the minimap (fog respected — only who's on screen now).
+  // Currently-visible enemies (this snapshot) + the accumulated match lineup.
   const mm = s.minimap || {};
   const myTeamNum = p.team_name === 'dire' ? 3 : 2;
-  const seenEnemies = [], seenAllies = [];
+  const visibleEnemies = [];
   for (const k of Object.keys(mm)) {
     const o = mm[k];
     if (!o || !String(o.name || '').startsWith('npc_dota_hero_')) continue;
-    const hn = prettyName(o.name, /^npc_dota_hero_/);
-    if (o.team === myTeamNum) { if (o.name !== h.name && !seenAllies.includes(hn)) seenAllies.push(hn); }
-    else if ((o.team === 2 || o.team === 3) && !seenEnemies.includes(hn)) seenEnemies.push(hn);
+    if (o.team !== myTeamNum && (o.team === 2 || o.team === 3)) {
+      const hn = prettyName(o.name, /^npc_dota_hero_/);
+      if (!visibleEnemies.includes(hn)) visibleEnemies.push(hn);
+    }
   }
+  const alliesAll = [...seenHeroes.allies];   // teammates (always on minimap)
+  const enemiesAll = [...seenHeroes.enemies]; // every enemy spotted so far
+  const noMapData = !minimapEverSeen;
   const gs = map.game_state || '';
   const isDraft = /HERO_SELECTION|STRATEGY_TIME|CUSTOM_GAME_SETUP/.test(gs);
   const myTeam = p.team_name || (myTeamNum === 3 ? 'dire' : 'radiant');
@@ -494,8 +521,10 @@ function buildAIContext() {
     `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
     abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
     draftLine,
-    seenEnemies.length ? `Сейчас видны на карте враги: ${seenEnemies.join(', ')}.` : null,
-    seenAllies.length ? `Видны союзники: ${seenAllies.join(', ')}.` : null,
+    alliesAll.length ? `Моя команда (союзники): ${alliesAll.join(', ')}.` : null,
+    enemiesAll.length ? `Враги (замечены за матч): ${enemiesAll.join(', ')}.` : null,
+    visibleEnemies.length ? `Прямо сейчас видны на карте враги: ${visibleEnemies.join(', ')}.` : null,
+    noMapData ? 'ВНИМАНИЕ: данные карты (minimap) не приходят — составы пока неизвестны. Если игрок назовёт героев врага в вопросе — советуй по ним.' : null,
   ];
   return lines.filter(Boolean).join('\n');
 }
