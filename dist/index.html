@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dota 2 Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Draggable overlay title bar -->
+  <header class="titlebar">
+    <div class="title-left">
+      <span class="logo">DOTA<span class="logo-2">2</span></span>
+      <span id="conn" class="conn conn--off"><span class="dot"></span><span id="conn-text">…</span></span>
+    </div>
+    <div class="title-btns">
+      <button class="tb" id="btn-settings" title="Настройки (Alt+S)">⚙</button>
+      <button class="tb" id="btn-logs" title="Логи (Alt+L)">▤</button>
+      <button class="tb" id="btn-min" title="Свернуть">—</button>
+      <button class="tb tb-close" id="btn-close" title="Скрыть (Alt+D)">✕</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab tab--active" data-tab="match">Матч</button>
+    <button class="tab" data-tab="scout">Разведка</button>
+  </nav>
+
+  <!-- ───────── LIVE MATCH TAB ───────── -->
+  <main id="tab-match" class="tabpane">
+    <section id="waiting" class="waiting">
+      <div class="wait-title">Ожидание Dota 2…</div>
+      <div class="wait-sub">Зайди в матч, бот-игру или демо героя.<br>Конфиг GSI ставится автоматически — если только что поставили, <b>перезапусти Dota</b>.</div>
+    </section>
+
+    <div id="live" class="hidden">
+      <!-- Scoreboard -->
+      <section class="scoreboard">
+        <div class="team team--radiant"><span class="tn">RAD</span><span id="radiant-score" class="ts">0</span></div>
+        <div class="clock-block">
+          <div id="clock" class="clock">0:00</div>
+          <div id="game-state" class="game-state">—</div>
+          <div id="daytime" class="daytime">☀</div>
+        </div>
+        <div class="team team--dire"><span id="dire-score" class="ts">0</span><span class="tn">DIRE</span></div>
+      </section>
+
+      <!-- Hero -->
+      <section class="card">
+        <div class="hero-head"><span id="hero-name" class="hero-name">—</span><span class="hero-level">Lv <span id="hero-level">0</span></span></div>
+        <div class="bar bar--hp"><div id="hp-fill" class="bar-fill"></div><span id="hp-text" class="bar-text">0/0</span></div>
+        <div class="bar bar--mana"><div id="mana-fill" class="bar-fill"></div><span id="mana-text" class="bar-text">0/0</span></div>
+        <div id="hero-status" class="status-row"></div>
+        <div id="respawn" class="respawn hidden">Респаун <span id="respawn-sec">0</span>с</div>
+      </section>
+
+      <!-- Player stats -->
+      <section class="card">
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-val" id="kda">0/0/0</span><span class="stat-label">K/D/A</span></div>
+          <div class="stat"><span class="stat-val" id="kda-ratio">0.0</span><span class="stat-label">KDA</span></div>
+          <div class="stat"><span class="stat-val" id="cs">0</span><span class="stat-label">LH</span></div>
+          <div class="stat"><span class="stat-val" id="denies">0</span><span class="stat-label">DN</span></div>
+          <div class="stat"><span class="stat-val" id="gpm">0</span><span class="stat-label">GPM</span></div>
+          <div class="stat"><span class="stat-val" id="xpm">0</span><span class="stat-label">XPM</span></div>
+          <div class="stat stat--gold"><span class="stat-val" id="gold">0</span><span class="stat-label">Gold</span></div>
+          <div class="stat stat--gold"><span class="stat-val" id="networth">0</span><span class="stat-label">Net Worth</span></div>
+        </div>
+        <div class="extra-stats"><span>Hero DMG <b id="hero-dmg">0</b></span><span>Tower DMG <b id="tower-dmg">0</b></span></div>
+        <button id="btn-ai" class="ai-btn">🤖 AI-совет</button>
+        <div id="ai-out" class="ai-out hidden"></div>
+      </section>
+
+      <!-- Items -->
+      <section class="card">
+        <div class="card-title">Предметы</div>
+        <div id="items" class="items-grid"></div>
+        <div class="neutral-row">Нейтрал: <span id="neutral-item" class="neutral-item">—</span></div>
+      </section>
+
+      <!-- Abilities -->
+      <section class="card">
+        <div class="card-title">Способности</div>
+        <div id="abilities" class="abilities-row"></div>
+      </section>
+
+      <!-- Towers -->
+      <section class="card">
+        <div class="card-title">Башни T1</div>
+        <div class="buildings">
+          <div><div class="b-team b-team--radiant">Radiant</div><div id="radiant-buildings" class="b-list"></div></div>
+          <div><div class="b-team b-team--dire">Dire</div><div id="dire-buildings" class="b-list"></div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ───────── SCOUTING TAB ───────── -->
+  <main id="tab-scout" class="tabpane hidden">
+    <section class="card">
+      <div class="card-title">Разведка игрока (OpenDota)</div>
+      <div class="search-row">
+        <input id="scout-input" class="scout-input" placeholder="Ник или Account/Steam ID" />
+        <button id="scout-go" class="scout-go">Найти</button>
+      </div>
+      <div id="scout-result" class="scout-result"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

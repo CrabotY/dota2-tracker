@@ -1,8 +1,8 @@
-name: Build & Release EXE
+name: Build & Release
 
-# Builds the Windows .exe on a real Windows runner and publishes it.
-#  - On a pushed tag like v1.0.0 → creates a GitHub Release with the exe attached.
-#  - Manual run (workflow_dispatch) → uploads the exe as a build artifact.
+# Builds the Electron installer on a real Windows runner and publishes it
+# (Setup .exe + .blockmap + latest.yml for auto-update) to a GitHub Release
+# whenever a vX.Y.Z tag is pushed.
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create the Release and upload assets
+  contents: write
 
 jobs:
   build-windows:
@@ -26,20 +26,9 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Build Windows exe
-        run: npm run build:exe
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dota2Tracker-windows
-          path: dist/Dota2Tracker.exe
-
-      - name: Publish Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/Dota2Tracker.exe
-          generate_release_notes: true
+      - name: Build & publish installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release

@@ -1,149 +1,107 @@
 # Dota 2 Tracker
 
-A live, in-game Dota 2 stats overlay/dashboard powered by Valve's official
-**Game State Integration (GSI)**. Dota 2 streams your current match state to a
-local server, which pushes it to a browser dashboard that updates several times
-per second — no game files are modified and it's fully ToS-friendly.
+A live, in-game Dota 2 **overlay** that shows your real-time match stats and lets
+you scout any player — built on Valve's official **Game State Integration (GSI)**.
+
+It's a desktop app (Electron): a frameless, always-on-top overlay you keep on
+top of the game. No game files are modified; GSI is ToS-friendly.
 
 ![status](https://img.shields.io/badge/status-working-brightgreen)
 
-## What it shows
+> **v2.0** merges two projects: the Electron overlay shell (tray, hotkeys,
+> transparency, auto-update) with a live GSI data pipeline that actually streams
+> in-game stats to the UI over WebSocket — so the numbers update several times a
+> second during the match (earlier versions polled external APIs that have no
+> live data for ordinary games, so nothing changed on screen).
 
-- **Scoreboard** — Radiant/Dire kills, game clock, game state, day/night
-- **Hero** — name, level, HP/mana bars, respawn timer, status effects
-  (stun/silence/hex/smoke/…)
-- **Player** — K/D/A + KDA ratio, last hits, denies, GPM, XPM, gold, net worth,
-  hero damage, tower damage
-- **Items** — all 9 inventory/backpack slots with cooldowns & charges + neutral item
-- **Abilities** — levels, cooldowns, ultimate highlight
-- **Buildings** — tier-1 tower health per lane
+## Features
 
-Everything is derived from the live GSI feed, so it works for **every hero and
-item** automatically.
+**Match tab — live, from GSI (updates in real time):**
+- Scoreboard: Radiant/Dire kills, game clock, game state, day/night
+- Hero: name, level, HP/mana bars, respawn timer, status effects (stun/silence/hex/smoke/…)
+- Player: K/D/A + KDA, last hits, denies, GPM, XPM, gold, net worth, hero & tower damage
+- Items (all 9 slots, cooldowns & charges) + neutral item
+- Abilities (levels, cooldowns, ultimate highlight)
+- Tier-1 tower health per lane
+- 🤖 **AI coach** — one click sends your current state to Claude for 5 quick tips
 
-## Download & run (easiest — no install)
+**Scout tab — from OpenDota:**
+- Look up any player by name or Steam/Account ID
+- Winrate, rank, recent average KDA/GPM/XPM, top heroes
 
-1. Go to the [**Releases**](../../releases/latest) page and download
-   **`Dota2Tracker.exe`** (Windows).
-2. Double-click it. It will:
-   - install the GSI config into your Dota 2 folder automatically,
-   - start the tracker,
-   - open the dashboard in your browser.
-3. **Restart Dota 2** (configs only load at launch), then load a match / bot
-   game / hero demo.
+**Overlay shell:**
+- Frameless, transparent, always-on-top; drag by the title bar
+- System tray, hotkeys (`Alt+D` show/hide · `Alt+L` logs · `Alt+S` settings · `Alt+Shift+D` reset position)
+- Adjustable opacity, in-app logs window
+- **Auto-update** via GitHub Releases
 
-That's it — the window shows live status; close it to stop the tracker.
+## Install (easiest)
 
-> The first launch may trigger a SmartScreen warning because the exe isn't
-> code-signed. Click **More info → Run anyway**. (You can also build it
-> yourself from source — see below — if you'd rather not trust the binary.)
+1. Download **`Dota-2-Tracker-Setup-x.y.z.exe`** from the
+   [**Releases**](../../releases/latest) page and run it.
+2. The app auto-installs the GSI config into your Dota 2 folder on first launch.
+3. **Restart Dota 2** (GSI configs load at launch), then load a match / bot game / demo.
 
-## Build the exe yourself
+The overlay appears top-right. SmartScreen may warn (the installer isn't
+code-signed) → **More info → Run anyway**.
+
+## Run from source
 
 ```bash
 npm install
-npm run build:exe      # → dist/Dota2Tracker.exe
+npm start          # launches the Electron overlay (dev)
 ```
 
-Cross-building works from any OS (pkg downloads the Windows Node base). The
-GitHub Actions workflow in `.github/workflows/build-release.yml` also builds it
-on a real Windows runner and attaches it to a Release whenever you push a
-`vX.Y.Z` tag.
-
-## Run from source (developers)
-
-## Quick start
+Test the data layer without the game (simulated match):
 
 ```bash
-# 1. Install dependencies
-npm install
-
-# 2. Install the GSI config into your Dota 2 folder (auto-detects Steam)
-npm run install-cfg
-
-# 3. Fully restart Dota 2 (GSI configs are only loaded at launch)
-
-# 4. Start the tracker
-npm start
-
-# 5. Open the dashboard
-#    http://localhost:3000
+npm run gsi        # terminal 1 — GSI server on :3001
+npm run mock       # terminal 2 — streams a fake live match
 ```
 
-Load into a match, a bot game, or a hero demo and the dashboard fills in live.
-
-## Try it without launching Dota
-
-You can verify the whole stack with a simulated match:
+## Build the installer
 
 ```bash
-npm start          # terminal 1
-npm run mock       # terminal 2 — streams a fake, evolving game
+npm run dist       # → release/Dota-2-Tracker-Setup-<version>.exe
 ```
 
-Open <http://localhost:3000> and watch the stats tick.
-
-## Manual GSI config install
-
-If auto-detection fails, copy `gamestate_integration_tracker.cfg` into:
-
-```
-<Steam>/steamapps/common/dota 2 beta/game/dota/cfg/gamestate_integration/
-```
-
-Create the `gamestate_integration` folder if it doesn't exist. Common Steam roots:
-
-| OS      | Path |
-|---------|------|
-| Windows | `C:\Program Files (x86)\Steam\…` |
-| macOS   | `~/Library/Application Support/Steam/…` |
-| Linux   | `~/.steam/steam/…` or `~/.local/share/Steam/…` |
-
-Then restart Dota 2.
-
-## Configuration
-
-Environment variables (optional):
-
-| Variable          | Default                 | Description |
-|-------------------|-------------------------|-------------|
-| `PORT`            | `3000`                  | Server / dashboard port |
-| `GSI_AUTH_TOKEN`  | `DOTA2_TRACKER_SECRET`  | Shared secret. **Must match** the `token` in the `.cfg` file. |
-
-If you change the port, also update the `uri` in
-`gamestate_integration_tracker.cfg` and re-run `npm run install-cfg`.
+The GitHub Actions workflow (`.github/workflows/build-release.yml`) builds the
+installer on a Windows runner and publishes it (Setup .exe + blockmap +
+`latest.yml` for auto-update) to a Release whenever a `vX.Y.Z` tag is pushed.
 
 ## How it works
 
 ```
- Dota 2  ──HTTP POST (JSON game state)──▶  server.js  ──WebSocket──▶  browser
- (GSI cfg)         several times/sec       (validates token,          (live UI)
-                                            enriches, broadcasts)
+ Dota 2 ──POST /gsi (JSON)──▶ gsi-server (:3001) ──WebSocket /ws──▶ overlay UI
+ (GSI cfg)   many times/sec    enrich + broadcast      live stats, instant
+
+ overlay ──HTTP──▶ gsi-server ──▶ OpenDota API   (scouting: profiles, winrates)
+                              └──▶ Anthropic API (AI coach)
 ```
 
-Dota 2 only sends GSI data for **the player it's currently observing** (your own
-hero in a normal match, or whoever you're spectating). It does **not** expose
-enemy-only information, so this is safe to use in ranked play.
+- `electron/` — main process (overlay window, tray, hotkeys, auto-update, GSI-config
+  auto-install) + preload bridge.
+- `gsi-server/server.js` — Express: receives GSI, validates the auth token,
+  enriches the payload, broadcasts over WebSocket; plus OpenDota/Valve/AI endpoints.
+- `dist/` — the overlay UI (plain HTML/CSS/JS, no build step).
+- `lib/gsi-install.js` — finds the Steam/Dota path and installs the cfg cross-platform.
 
-## Project layout
+## Configuration
 
-```
-server.js                                  GSI receiver + WebSocket + static host
-gamestate_integration_tracker.cfg          The config Dota loads
-scripts/install-gsi-config.js              Copies the cfg into your Dota folder
-scripts/mock-gsi.js                        Simulated match for development
-public/                                    Dashboard (index.html, style.css, app.js)
-```
+Optional API keys (Settings window, saved to `%AppData%/Dota 2 Tracker/.env`):
 
-## Troubleshooting
+| Key                 | Enables |
+|---------------------|---------|
+| `STEAM_API_KEY`     | Live full-scoreboard lookups via Valve WebAPI |
+| `ANTHROPIC_API_KEY` | The 🤖 AI coach |
 
-- **Dashboard stuck on "Waiting for Dota 2…"** — the config isn't loaded. Make
-  sure you fully restarted Dota *after* installing the cfg, and that you're in a
-  game/demo (the main menu sends little to no data).
-- **403 in the server log** — the `token` in the cfg doesn't match
-  `GSI_AUTH_TOKEN`. Keep them identical.
-- **Nothing in the log at all** — check the `uri` port in the cfg matches the
-  server `PORT`, and that no firewall blocks `localhost:3000`.
+The GSI auth token defaults to `DOTA2_TRACKER_SECRET` (must match the `.cfg`);
+override with `GSI_AUTH_TOKEN`.
+
+## Credits
+
+- Original overlay app & concept: [ReXaXeR/dota2-tracker](https://github.com/ReXaXeR/dota2-tracker)
+- Live GSI pipeline + merge: this fork.
 
 ## License
 

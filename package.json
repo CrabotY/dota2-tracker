@@ -1,47 +1,59 @@
 {
   "name": "dota2-tracker",
-  "version": "1.0.0",
-  "description": "Live Dota 2 stats tracker using Valve's Game State Integration (GSI)",
-  "main": "server.js",
-  "bin": "launcher.js",
-  "type": "commonjs",
-  "scripts": {
-    "start": "node server.js",
-    "launcher": "node launcher.js",
-    "dev": "node --watch server.js",
-    "install-cfg": "node scripts/install-gsi-config.js",
-    "mock": "node scripts/mock-gsi.js",
-    "build:exe": "pkg . --targets node18-win-x64 --output dist/Dota2Tracker.exe",
-    "build:all": "pkg . --targets node18-win-x64,node18-macos-x64,node18-linux-x64 --out-path dist"
-  },
-  "keywords": [
-    "dota2",
-    "gsi",
-    "game-state-integration",
-    "tracker",
-    "stats"
-  ],
-  "author": "ReXaXeR",
+  "version": "2.0.0",
+  "description": "Dota 2 Tracker — live in-game stats overlay via GSI + player scouting (OpenDota) + AI coach",
+  "main": "electron/main.js",
+  "author": "CrabotY",
   "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "gsi": "node gsi-server/server.js",
+    "mock": "node scripts/mock-gsi.js",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "fun.crabot.dota2tracker",
+    "productName": "Dota 2 Tracker",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "gsi-server/**/*",
+      "lib/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      "gamestate_integration_dota2tracker.cfg"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Dota-2-Tracker-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "CrabotY",
+      "repo": "dota2-tracker"
+    }
+  },
   "dependencies": {
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "electron-updater": "^6.2.1",
     "express": "^4.19.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^6.14.2"
-  },
-  "pkg": {
-    "scripts": [
-      "server.js",
-      "lib/**/*.js"
-    ],
-    "assets": [
-      "public/**/*",
-      "gamestate_integration_tracker.cfg"
-    ],
-    "targets": [
-      "node18-win-x64"
-    ],
-    "outputPath": "dist"
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
   }
 }

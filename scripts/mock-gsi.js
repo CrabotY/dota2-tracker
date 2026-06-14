@@ -9,7 +9,8 @@
 
 const http = require('http');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.GSI_PORT || process.env.PORT || 3001;
+const GSI_PATH = '/gsi';
 const AUTH_TOKEN = process.env.GSI_AUTH_TOKEN || 'DOTA2_TRACKER_SECRET';
 const TICK_MS = 500;
 
@@ -153,7 +154,7 @@ function send(payload) {
   const req = http.request({
     host: 'localhost',
     port: PORT,
-    path: '/',
+    path: GSI_PATH,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
   }, (res) => { res.resume(); });
@@ -162,5 +163,5 @@ function send(payload) {
   req.end();
 }
 
-console.log(`Mock GSI → http://localhost:${PORT}/  (Ctrl+C to stop)`);
+console.log(`Mock GSI → http://localhost:${PORT}${GSI_PATH}  (Ctrl+C to stop)`);
 setInterval(() => send(buildPayload()), TICK_MS);
