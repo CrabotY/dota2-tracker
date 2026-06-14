@@ -18,8 +18,12 @@ document.querySelectorAll('.tab').forEach((t) => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.remove('tab--active'));
     t.classList.add('tab--active');
     const tab = t.dataset.tab;
-    $('tab-match').classList.toggle('hidden', tab !== 'match');
-    $('tab-scout').classList.toggle('hidden', tab !== 'scout');
+    // Generic: show the pane whose id is `tab-<name>`, hide the rest. Covers
+    // match / scout / ai (and any tab added later) — the old code only toggled
+    // match+scout, so the AI pane never un-hid and showed up blank.
+    document.querySelectorAll('.tabpane').forEach((pane) => {
+      pane.classList.toggle('hidden', pane.id !== `tab-${tab}`);
+    });
   };
 });
 
