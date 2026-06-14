@@ -230,6 +230,26 @@ b { font-weight: 700; }
 .b-bar-fill { height: 100%; background: var(--radiant); transition: width .3s; }
 .b-row.dead .b-bar-fill { background: var(--dire); }
 
+/* Minimap */
+.mm-legend { font-size: 9px; color: var(--dim); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.mm-legend .mm-dot { position: static; width: 7px; height: 7px; margin: 0 1px 0 6px; }
+.minimap { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px;
+  border: 1px solid var(--border); overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(95,211,138,.10) 0%, transparent 42%, transparent 58%, rgba(240,100,100,.10) 100%),
+    repeating-linear-gradient(0deg, transparent 0 24px, rgba(255,255,255,.03) 24px 25px),
+    repeating-linear-gradient(90deg, transparent 0 24px, rgba(255,255,255,.03) 24px 25px),
+    #0b0f17; }
+.minimap::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(45deg, transparent 47%, rgba(78,166,230,.12) 49% 51%, transparent 53%); } /* river hint */
+.mm-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--dim-2); font-size: 11px; }
+.mm-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); }
+.mm-hero { width: 9px; height: 9px; border: 1px solid rgba(0,0,0,.6); box-shadow: 0 0 4px rgba(0,0,0,.5); }
+.mm-ally { background: var(--radiant); }
+.mm-enemy { background: var(--dire); }
+.mm-neutral { background: #c9a14a; opacity: .7; }
+.mm-me { background: var(--gold); width: 11px; height: 11px; border: 2px solid #fff; box-shadow: 0 0 8px var(--gold); z-index: 2; }
+
 /* Scouting */
 .search-row { display: flex; gap: 8px; }
 .scout-input { -webkit-app-region: no-drag; flex: 1; height: 34px; padding: 0 12px;

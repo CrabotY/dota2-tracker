@@ -106,6 +106,34 @@ function render(s) {
   renderItems(s.items);
   renderAbilities(s.abilities);
   renderBuildings(s.buildings);
+  renderMinimap(s.minimap, h.name, p.team_name);
+}
+
+// Live minimap: plot every visible object (fog-of-war respected by Dota). World
+// coords run ~[-8200, 8200]; Radiant base is bottom-left, so we invert Y.
+const WORLD_MIN = -8200, WORLD_RANGE = 16400;
+function renderMinimap(minimap, myHeroName, myTeam) {
+  const el = $('minimap');
+  if (!minimap || typeof minimap !== 'object' || !Object.keys(minimap).length) {
+    el.innerHTML = '<div class="mm-empty">нет данных карты</div>';
+    return;
+  }
+  const myTeamNum = myTeam === 'dire' ? 3 : 2; // radiant = 2, dire = 3
+  const dots = [];
+  for (const key of Object.keys(minimap)) {
+    const o = minimap[key];
+    if (!o || typeof o.xpos !== 'number' || typeof o.ypos !== 'number') continue;
+    const left = Math.max(0, Math.min(100, (o.xpos - WORLD_MIN) / WORLD_RANGE * 100));
+    const top = Math.max(0, Math.min(100, (1 - (o.ypos - WORLD_MIN) / WORLD_RANGE) * 100));
+    const isHero = String(o.name || '').startsWith('npc_dota_hero_');
+    let cls;
+    if (isHero && o.name === myHeroName) cls = 'mm-dot mm-hero mm-me';
+    else if (o.team === myTeamNum) cls = isHero ? 'mm-dot mm-hero mm-ally' : 'mm-dot mm-ally';
+    else if (o.team === 2 || o.team === 3) cls = isHero ? 'mm-dot mm-hero mm-enemy' : 'mm-dot mm-enemy';
+    else cls = 'mm-dot mm-neutral';
+    dots.push(`<i class="${cls}" style="left:${left}%;top:${top}%"></i>`);
+  }
+  el.innerHTML = dots.length ? dots.join('') : '<div class="mm-empty">нет данных карты</div>';
 }
 
 function renderItems(items) {

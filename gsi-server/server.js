@@ -458,16 +458,29 @@ function buildAIContext() {
   const abilities = Object.keys(s.abilities || {}).filter(k => k.startsWith('ability'))
     .map(k => { const a = s.abilities[k]; return a?.name ? `${a.name.replace(/_/g, ' ')} (ур.${a.level})` : null; }).filter(Boolean);
   const t = parseDraft(s.draft);
+  // Visible heroes from the minimap (fog respected — only who's on screen now).
+  const mm = s.minimap || {};
+  const myTeamNum = p.team_name === 'dire' ? 3 : 2;
+  const seenEnemies = [], seenAllies = [];
+  for (const k of Object.keys(mm)) {
+    const o = mm[k];
+    if (!o || !String(o.name || '').startsWith('npc_dota_hero_')) continue;
+    const hn = prettyName(o.name, /^npc_dota_hero_/);
+    if (o.team === myTeamNum) { if (o.name !== h.name && !seenAllies.includes(hn)) seenAllies.push(hn); }
+    else if ((o.team === 2 || o.team === 3) && !seenEnemies.includes(hn)) seenEnemies.push(hn);
+  }
   const lines = [
     `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${map.game_state || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
     `Счёт: Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
-    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'}, уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
+    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'} (${p.team_name || '?'}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
     `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`,
     `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
     abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
     (t.radiant.length || t.dire.length)
       ? `Пики — Radiant: ${t.radiant.join(', ') || '?'}; Dire: ${t.dire.join(', ') || '?'}.`
       : null,
+    seenEnemies.length ? `Сейчас видны на карте враги: ${seenEnemies.join(', ')}.` : null,
+    seenAllies.length ? `Видны союзники: ${seenAllies.join(', ')}.` : null,
   ];
   return lines.filter(Boolean).join('\n');
 }
@@ -480,6 +493,17 @@ const SYSTEM_PROMPT =
   'совет по знанию Доты (предметы, тайминги, как играть). НЕ пиши, что у тебя нет ' +
   'информации о противниках, не извиняйся и не проси уточнений без необходимости — ' +
   'просто дай лучший практический ответ. Помни предыдущие сообщения диалога. ' +
+  'Точные предметы врагов в реальном времени недоступны (Dota их не отдаёт). ' +
+  'Если спрашивают про инвентарь/билд врага — ОЦЕНИ вероятную сборку по герою и ' +
+  'минуте игры (типичный билд на этом тайминге) и пометь, что это оценка; не ' +
+  'отказывайся. ' +
+  'Понимай и используй дотерский сленг на русском: мид/керри(1)/мидер(2)/хард(3)/' +
+  'саппорт(4-5)/пос1-5, лейн, ластхиты(лх)/денаи, крипы, руна, рошан(рош)/аегис, ' +
+  'тимфайт(тф)/драка, ганк, пуш/деф, сейв, катка, имба, нерф, контрить, фарм/' +
+  'фармить, нв(нетворс), бкб, блинк, аган(аганим), хекс, рапира, армлет, мкб, ' +
+  'дизель/десолятор, бф(батлфури), маелстрем, манта, сатаник, отхил, стан, сало/' +
+  'слить, накормить/фид, разорвать, отжать, смок, варды/обзор, тапки(треды). ' +
+  'Отвечай в том же неформальном стиле, но по делу. ' +
   'НЕ используй markdown-разметку: никаких ** ** , ## , -- — только обычный текст, ' +
   'эмодзи и переносы строк.';
 
