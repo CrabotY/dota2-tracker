@@ -20,8 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateStatus:  (cb) => ipcRenderer.on('update-status', (_, p) => cb(p)),
 
   // Settings / API keys
-  saveEnvKey:   (name, value) => ipcRenderer.send('save-env-key', name, value),
-  onAppVersion: (cb) => ipcRenderer.on('app-version', (_, v) => cb(v)),
+  saveEnvKey:    (name, value) => ipcRenderer.send('save-env-key', name, value),
+  getSettings:   ()    => ipcRenderer.invoke('get-settings'),
+  setAutoLaunch: (on)  => ipcRenderer.send('set-auto-launch', on),
+  onAppVersion:  (cb)  => ipcRenderer.on('app-version', (_, v) => cb(v)),
 
   // Logs
   onLog:        (cb) => ipcRenderer.on('log',         (_, e)  => cb(e)),

@@ -20,6 +20,44 @@ let gsiProcess   = null;
 const isDev = !app.isPackaged;
 
 const CFG_NAME = 'gamestate_integration_dota2tracker.cfg';
+const startedHidden = process.argv.includes('--hidden');
+
+// ─── Single instance ──────────────────────────────────────────────────────────
+// Prevents two copies fighting over GSI port 3001; a second launch just reveals
+// the already-running overlay.
+const hasLock = app.requestSingleInstanceLock();
+if (!hasLock) app.quit();
+
+// ─── Настройки (settings.json в userData) ─────────────────────────────────────
+function settingsFile() { return path.join(app.getPath('userData'), 'settings.json'); }
+function loadSettings() {
+  try { return JSON.parse(require('fs').readFileSync(settingsFile(), 'utf8')); }
+  catch { return { autoLaunch: true }; }
+}
+function saveSettings(s) {
+  try { require('fs').writeFileSync(settingsFile(), JSON.stringify(s, null, 2)); } catch {}
+}
+
+// ─── Автозапуск с Windows (скрыто в трей) ─────────────────────────────────────
+// Так конфиг всегда установлен и сервер готов ещё до запуска Dota — перезаход
+// игры больше не нужен.
+function applyAutoLaunch(enabled) {
+  if (isDev) return;
+  try { app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true, args: ['--hidden'] }); }
+  catch (e) { pushLog('error', `autoLaunch: ${e.message}`); }
+}
+
+// ─── Запущена ли Dota прямо сейчас ────────────────────────────────────────────
+function isDotaRunning() {
+  try {
+    const { execSync } = require('child_process');
+    if (process.platform === 'win32') {
+      const out = execSync('tasklist /FI "IMAGENAME eq dota2.exe" /NH', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      return /dota2\.exe/i.test(out);
+    }
+    return execSync('pgrep -x dota2 || true', { encoding: 'utf8' }).trim().length > 0;
+  } catch { return false; }
+}
 
 // ─── Лог-буфер ───────────────────────────────────────────────────────────────
 const logBuffer = [];
@@ -44,7 +82,12 @@ function installGsiConfig() {
     const res = installConfig(cfgPath, CFG_NAME);
     if (res.ok) {
       pushLog('info', `✓ GSI конфиг установлен: ${res.dest}`);
-      pushLog('info', '⚠ Перезапусти Dota 2, если она запущена (конфиг читается при старте).');
+      if (isDotaRunning()) {
+        pushLog('warn', '⚠ Dota сейчас запущена — конфиг прочитается только при её следующем старте. ' +
+          'Перезапусти Dota ОДИН раз; дальше перезаходы не нужны.');
+      } else {
+        pushLog('info', '✓ Готово. Dota не запущена — при следующем старте всё подхватится, перезаход не нужен.');
+      }
     } else if (res.reason === 'dota-not-found') {
       pushLog('warn', '⚠ Dota 2 не найдена автоматически — скопируй конфиг вручную:');
       pushLog('warn', `   ${cfgPath}`);
@@ -125,6 +168,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 440, height: 760,
     x: width - 460, y: 20,
+    show: !startedHidden, // launched at login → start hidden in the tray
     frame: false, transparent: true,
     alwaysOnTop: true, skipTaskbar: false,
     resizable: true, hasShadow: false,
@@ -225,6 +269,10 @@ code{background:#1e2535;padding:2px 6px;border-radius:3px;color:#c8d0e0}
         <button class="btn btn-ghost" onclick="saveKey('ANTHROPIC_API_KEY','ai-key')">Сохранить</button></div></div>
   </div>
   <div class="section"><div class="section-title">Оверлей</div>
+    <div class="card"><div class="card-row"><div><div class="card-label">Автозапуск с Windows</div>
+      <div class="card-sub">Трекер тихо стартует в трее при входе — конфиг всегда на месте, перезаход Dota не нужен.</div></div>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;color:#7a8299">
+        <input type="checkbox" id="auto-launch" checked onchange="toggleAutoLaunch(this.checked)"> Вкл</label></div></div>
     <div class="card"><div class="card-row"><div><div class="card-label">Прозрачность</div>
       <div class="card-sub" id="opacity-val">100%</div></div>
       <input type="range" min="30" max="100" value="100" id="opacity-slider" style="width:120px" oninput="updateOpacity(this.value)"></div></div>
@@ -255,6 +303,8 @@ api?.onUpdateStatus(info => {
 function checkUpdates(){api?.checkForUpdates();} function downloadUpdate(){api?.downloadUpdate();} function installUpdate(){api?.installUpdate();}
 function openExternal(u){api?.openExternal(u);}
 function updateOpacity(v){document.getElementById('opacity-val').textContent=v+'%';api?.setOpacity(v/100);}
+function toggleAutoLaunch(on){api?.setAutoLaunch(on);}
+api?.getSettings?.().then(s=>{ if(s&&typeof s.autoLaunch==='boolean') document.getElementById('auto-launch').checked=s.autoLaunch; });
 function saveKey(name,id){const v=document.getElementById(id).value.trim();if(!v)return;api?.saveEnvKey(name,v);alert('Сохранено — перезапусти трекер');}
 </script></body></html>`;
 }
@@ -338,6 +388,13 @@ ipcMain.on('download-update', () => autoUpdater.downloadUpdate());
 ipcMain.on('install-update',  () => autoUpdater.quitAndInstall(false, true));
 ipcMain.handle('get-version', () => app.getVersion());
 
+ipcMain.handle('get-settings', () => loadSettings());
+ipcMain.on('set-auto-launch', (_, enabled) => {
+  const s = loadSettings(); s.autoLaunch = !!enabled; saveSettings(s);
+  applyAutoLaunch(!!enabled);
+  pushLog('info', `Автозапуск с Windows: ${enabled ? 'вкл' : 'выкл'}`);
+});
+
 ipcMain.on('save-env-key', (_, name, value) => {
   const fs = require('fs');
   const envPath = path.join(app.getPath('userData'), '.env');
@@ -350,9 +407,13 @@ ipcMain.on('save-env-key', (_, name, value) => {
   } catch (e) { pushLog('error', `Ошибка сохранения ключа: ${e.message}`); }
 });
 
+// Second launch → just reveal the running overlay instead of starting a rival.
+app.on('second-instance', () => { mainWindow?.show(); mainWindow?.focus(); });
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+if (hasLock) app.whenReady().then(() => {
   pushLog('info', `═══ Dota 2 Tracker v${app.getVersion()} ═══`);
+  applyAutoLaunch(loadSettings().autoLaunch !== false); // default ON
   installGsiConfig();
   startGSIServer();
   createWindow();

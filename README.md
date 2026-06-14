@@ -45,6 +45,21 @@ top of the game. No game files are modified; GSI is ToS-friendly.
 The overlay appears top-right. SmartScreen may warn (the installer isn't
 code-signed) → **More info → Run anyway**.
 
+## FAQ
+
+**Do I have to restart Dota every time?**
+No — only **once**, and only if Dota was already running the first time the
+tracker installed the config. Dota reads GSI configs only at its own startup
+(a Valve limitation — there's no way to make it reload them live). The tracker
+auto-starts with Windows (toggle in Settings ⚙) and keeps the config installed,
+so on every later Dota launch it's already there and no restart is needed.
+
+**Can I open the tracker in the middle of a match?**
+Yes. GSI streams the full current state continuously, and the server replays the
+latest snapshot the moment the overlay connects — so you'll see live data within
+a second of opening it mid-game (as long as the config was loaded when Dota
+started).
+
 ## Run from source
 
 ```bash
