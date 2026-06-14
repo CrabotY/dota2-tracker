@@ -24,6 +24,7 @@
   <nav class="tabs">
     <button class="tab tab--active" data-tab="match">Матч</button>
     <button class="tab" data-tab="scout">Разведка</button>
+    <button class="tab" data-tab="ai">AI</button>
   </nav>
 
   <!-- ───────── LIVE MATCH TAB ───────── -->
@@ -53,11 +54,9 @@
         <div class="team team--dire"><span id="dire-score" class="ts">0</span><span class="tn">DIRE</span></div>
       </section>
 
-      <!-- Hero -->
+      <!-- Hero (HP/mana/level intentionally not displayed; still sent to the AI) -->
       <section class="card">
-        <div class="hero-head"><span id="hero-name" class="hero-name">—</span><span class="hero-level">Lv <span id="hero-level">0</span></span></div>
-        <div class="bar bar--hp"><div id="hp-fill" class="bar-fill"></div><span id="hp-text" class="bar-text">0/0</span></div>
-        <div class="bar bar--mana"><div id="mana-fill" class="bar-fill"></div><span id="mana-text" class="bar-text">0/0</span></div>
+        <div class="hero-head"><span id="hero-name" class="hero-name">—</span></div>
         <div id="hero-status" class="status-row"></div>
         <div id="respawn" class="respawn hidden">Респаун <span id="respawn-sec">0</span>с</div>
       </section>
@@ -75,8 +74,6 @@
           <div class="stat stat--gold"><span class="stat-val" id="networth">0</span><span class="stat-label">Net Worth</span></div>
         </div>
         <div class="extra-stats"><span>Hero DMG <b id="hero-dmg">0</b></span><span>Tower DMG <b id="tower-dmg">0</b></span></div>
-        <button id="btn-ai" class="ai-btn">🤖 AI-совет</button>
-        <div id="ai-out" class="ai-out hidden"></div>
       </section>
 
       <!-- Items -->
@@ -117,6 +114,27 @@
       </div>
       <div id="scout-result" class="scout-result"></div>
     </section>
+  </main>
+
+  <!-- ───────── AI CHAT TAB ───────── -->
+  <main id="tab-ai" class="tabpane tab-ai hidden">
+    <div class="ai-head">
+      <span id="ai-prov" class="ai-prov">—</span>
+      <button id="ai-clear" class="ai-clear" title="Очистить историю">Очистить</button>
+    </div>
+    <div id="ai-chat" class="ai-chat">
+      <div class="ai-empty">Спроси что угодно по текущему матчу — ассистент видит минуту игры,
+        твои статы, предметы и пики. Помнит историю диалога.</div>
+    </div>
+    <div class="ai-chips" id="ai-chips">
+      <button class="ai-chip" data-q="Что мне купить следующим предметом и почему?">Что купить?</button>
+      <button class="ai-chip" data-q="Как мне сейчас играть — фармить, пушить или драться?">Как играть?</button>
+      <button class="ai-chip" data-q="Кого из вражеской команды мне нужно контрить и чем?">Кого контрить?</button>
+    </div>
+    <div class="ai-ask">
+      <input id="ai-input" class="ai-input" placeholder="Напр.: против Хускара что купить?" />
+      <button id="ai-send" class="ai-send">▶</button>
+    </div>
   </main>
 
   <script src="app.js"></script>

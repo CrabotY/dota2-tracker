@@ -80,15 +80,9 @@ function render(s) {
   $('hero-dmg').textContent = fmt(p.hero_damage ?? 0);
   $('tower-dmg').textContent = fmt(p.tower_damage ?? 0);
 
-  // Hero
+  // Hero — name + status only. HP/mana/level are intentionally NOT displayed,
+  // but they stay in `lastState` and are sent to the AI assistant.
   $('hero-name').textContent = heroName(h.name) || '—';
-  $('hero-level').textContent = h.level ?? 0;
-  const hpPct = h.max_health ? (h.health / h.max_health) * 100 : 0;
-  const mpPct = h.max_mana ? (h.mana / h.max_mana) * 100 : 0;
-  $('hp-fill').style.width = `${hpPct}%`;
-  $('mana-fill').style.width = `${mpPct}%`;
-  $('hp-text').textContent = `${fmt(h.health ?? 0)} / ${fmt(h.max_health ?? 0)}`;
-  $('mana-text').textContent = `${fmt(h.mana ?? 0)} / ${fmt(h.max_mana ?? 0)}`;
 
   const row = $('hero-status');
   row.innerHTML = '';
@@ -199,22 +193,56 @@ function connect() {
 }
 connect();
 
-// ── AI coach ─────────────────────────────────────────────────────────────────
-$('btn-ai').onclick = async () => {
-  const out = $('ai-out'); out.classList.remove('hidden'); out.textContent = 'Думаю…';
-  const p = lastState?.player || {}, h = lastState?.hero || {};
-  const prompt = `Я играю ${heroName(h.name) || 'героя'}, уровень ${h.level || 0}, ` +
-    `${p.kills || 0}/${p.deaths || 0}/${p.assists || 0}, ${p.last_hits || 0} ласт-хитов, ` +
-    `GPM ${p.gpm || 0}, нетворс ${lastState?.derived?.netWorth || 0}, время ${clockStr(lastState?.map?.clock_time)}. ` +
-    `Дай 5 коротких советов что делать дальше.`;
+// ── AI assistant — chat with history; server injects the live match context ──
+const aiHistory = [];          // [{role:'user'|'assistant', content}]
+let aiBusy = false;
+
+function renderChat() {
+  const box = $('ai-chat');
+  if (!aiHistory.length) {
+    box.innerHTML = '<div class="ai-empty">Спроси что угодно по текущему матчу — ассистент видит минуту игры, твои статы, предметы и пики. Помнит историю диалога.</div>';
+    return;
+  }
+  box.innerHTML = aiHistory.map((m) =>
+    `<div class="ai-msg ai-msg--${m.role === 'user' ? 'me' : 'bot'}">${esc(m.content).replace(/\n/g, '<br>')}</div>`
+  ).join('') + (aiBusy ? '<div class="ai-msg ai-msg--bot ai-typing">…</div>' : '');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendAI(question) {
+  if (aiBusy || !question.trim()) return;
+  aiHistory.push({ role: 'user', content: question.trim() });
+  aiBusy = true; renderChat();
+  $('ai-input').value = '';
   try {
-    const r = await fetch(`${API}/ai/analyze`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }),
+    const r = await fetch(`${API}/ai`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: aiHistory }),
     });
     const data = await r.json();
-    out.textContent = r.ok ? (data.text || '—') : (data.error || 'Ошибка. Добавь Anthropic API ключ в настройках.');
-  } catch (e) { out.textContent = 'Сервер недоступен: ' + e.message; }
-};
+    aiBusy = false;
+    aiHistory.push({ role: 'assistant', content: r.ok ? (data.text || '—') : ('⚠ ' + (data.error || 'Ошибка запроса')) });
+    renderChat();
+  } catch (e) {
+    aiBusy = false;
+    aiHistory.push({ role: 'assistant', content: '⚠ Сервер недоступен: ' + e.message });
+    renderChat();
+  }
+}
+
+async function refreshAiProvider() {
+  try {
+    const info = await (await fetch(`${API}/ai/info`)).json();
+    $('ai-prov').textContent = info.hasKey ? info.label : info.label + ' · нет ключа';
+    $('ai-prov').className = 'ai-prov' + (info.hasKey ? ' ok' : ' nokey');
+  } catch { $('ai-prov').textContent = '—'; }
+}
+
+$('ai-send').onclick = () => sendAI($('ai-input').value);
+$('ai-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAI($('ai-input').value); });
+$('ai-clear').onclick = () => { aiHistory.length = 0; renderChat(); };
+document.querySelectorAll('.ai-chip').forEach((c) => { c.onclick = () => sendAI(c.dataset.q); });
+document.querySelector('.tab[data-tab="ai"]').addEventListener('click', refreshAiProvider);
 
 // ── Scouting ─────────────────────────────────────────────────────────────────
 const MEDALS = ['Herald','Guardian','Crusader','Archon','Legend','Ancient','Divine','Immortal'];

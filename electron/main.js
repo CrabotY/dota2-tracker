@@ -263,10 +263,32 @@ code{background:#1e2535;padding:2px 6px;border-radius:3px;color:#c8d0e0}
       <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
         <a class="link" onclick="openExternal('https://steamcommunity.com/dev/apikey');return false">Получить ключ →</a>
         <button class="btn btn-ghost" onclick="saveKey('STEAM_API_KEY','steam-key')">Сохранить</button></div></div>
-    <div class="card"><div class="card-label" style="margin-bottom:8px">Anthropic API Key — для AI-тренера</div>
-      <input class="input" type="password" id="ai-key" placeholder="sk-ant-...">
-      <div style="display:flex;justify-content:flex-end;margin-top:8px">
-        <button class="btn btn-ghost" onclick="saveKey('ANTHROPIC_API_KEY','ai-key')">Сохранить</button></div></div>
+  </div>
+  <div class="section"><div class="section-title">AI-ассистент</div>
+    <div class="card">
+      <div class="card-label" style="margin-bottom:8px">Провайдер нейросети</div>
+      <select class="input" id="ai-provider" onchange="setProvider(this.value)">
+        <option value="openai">ChatGPT (OpenAI)</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="deepseek">DeepSeek</option>
+      </select>
+      <div class="card-sub" style="margin-top:6px">Каждый вводит свой ключ. Ключи хранятся только на твоём ПК (userData\\.env) и не попадают в репозиторий/релиз.</div>
+    </div>
+    <div class="card"><div class="card-label" style="margin-bottom:6px">OpenAI API Key (ChatGPT)</div>
+      <input class="input" type="password" id="openai-key" placeholder="sk-...">
+      <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
+        <a class="link" onclick="openExternal('https://platform.openai.com/api-keys');return false">Получить ключ →</a>
+        <button class="btn btn-ghost" onclick="saveKey('OPENAI_API_KEY','openai-key')">Сохранить</button></div></div>
+    <div class="card"><div class="card-label" style="margin-bottom:6px">Google Gemini API Key</div>
+      <input class="input" type="password" id="gemini-key" placeholder="AIza...">
+      <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
+        <a class="link" onclick="openExternal('https://aistudio.google.com/app/apikey');return false">Получить ключ →</a>
+        <button class="btn btn-ghost" onclick="saveKey('GEMINI_API_KEY','gemini-key')">Сохранить</button></div></div>
+    <div class="card"><div class="card-label" style="margin-bottom:6px">DeepSeek API Key</div>
+      <input class="input" type="password" id="deepseek-key" placeholder="sk-...">
+      <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
+        <a class="link" onclick="openExternal('https://platform.deepseek.com/api_keys');return false">Получить ключ →</a>
+        <button class="btn btn-ghost" onclick="saveKey('DEEPSEEK_API_KEY','deepseek-key')">Сохранить</button></div></div>
   </div>
   <div class="section"><div class="section-title">Оверлей</div>
     <div class="card"><div class="card-row"><div><div class="card-label">Автозапуск с Windows</div>
@@ -305,7 +327,9 @@ function openExternal(u){api?.openExternal(u);}
 function updateOpacity(v){document.getElementById('opacity-val').textContent=v+'%';api?.setOpacity(v/100);}
 function toggleAutoLaunch(on){api?.setAutoLaunch(on);}
 api?.getSettings?.().then(s=>{ if(s&&typeof s.autoLaunch==='boolean') document.getElementById('auto-launch').checked=s.autoLaunch; });
-function saveKey(name,id){const v=document.getElementById(id).value.trim();if(!v)return;api?.saveEnvKey(name,v);alert('Сохранено — перезапусти трекер');}
+function saveKey(name,id){const v=document.getElementById(id).value.trim();if(!v)return;api?.saveEnvKey(name,v);alert('Сохранено ✓');}
+function setProvider(v){api?.saveEnvKey('AI_PROVIDER',v);}
+fetch('http://localhost:3001/ai/info').then(r=>r.json()).then(i=>{if(i&&i.provider)document.getElementById('ai-provider').value=i.provider;}).catch(()=>{});
 </script></body></html>`;
 }
 

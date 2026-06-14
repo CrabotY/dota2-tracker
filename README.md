@@ -101,14 +101,35 @@ installer on a Windows runner and publishes it (Setup .exe + blockmap +
 - `dist/` — the overlay UI (plain HTML/CSS/JS, no build step).
 - `lib/gsi-install.js` — finds the Steam/Dota path and installs the cfg cross-platform.
 
+## AI assistant
+
+A chat (with conversation history) that answers any Dota question and sees your
+**live match context** — game minute, your hero/level/HP/mana/stats/items/
+abilities, scores and draft picks. Ask things like *"против Хускара что купить?"*.
+
+Pick a provider in **Settings ⚙** and paste **your own** key — choose one of:
+
+| Provider | Get a key |
+|----------|-----------|
+| ChatGPT (OpenAI) | <https://platform.openai.com/api-keys> |
+| Google Gemini    | <https://aistudio.google.com/app/apikey> |
+| DeepSeek         | <https://platform.deepseek.com/api_keys> |
+
+Keys are stored **only locally** (`%AppData%/Dota 2 Tracker/.env`) and are never
+committed to the repo or bundled in the release. They take effect immediately
+(no restart).
+
+> Note: GSI only exposes *your* live data + the draft (hero lineups). Teammates'/
+> enemies' live items aren't available in a normal match, so the AI reasons from
+> your situation, the picks, and what you mention in the question.
+
 ## Configuration
 
-Optional API keys (Settings window, saved to `%AppData%/Dota 2 Tracker/.env`):
+Other optional keys (Settings window, saved to `%AppData%/Dota 2 Tracker/.env`):
 
-| Key                 | Enables |
-|---------------------|---------|
-| `STEAM_API_KEY`     | Live full-scoreboard lookups via Valve WebAPI |
-| `ANTHROPIC_API_KEY` | The 🤖 AI coach |
+| Key             | Enables |
+|-----------------|---------|
+| `STEAM_API_KEY` | Live full-scoreboard lookups via Valve WebAPI (optional) |
 
 The GSI auth token defaults to `DOTA2_TRACKER_SECRET` (must match the `.cfg`);
 override with `GSI_AUTH_TOKEN`.

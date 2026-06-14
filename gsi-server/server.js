@@ -380,20 +380,132 @@ app.get('/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/ai/analyze', async (req, res) => {
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'Нет prompt' });
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.status(503).json({ error: 'ANTHROPIC_API_KEY не задан' });
+// ─── AI ассистент (выбор провайдера, чат с историей) ──────────────────────────
+// Ключи и выбор провайдера хранятся ЛОКАЛЬНО в userData/.env — никогда в репо.
+// Читаем .env заново на каждый запрос, чтобы новый ключ работал без перезапуска.
+function userEnv() {
+  const merged = { ...process.env };
   try {
-    const { data } = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: 'claude-sonnet-4-20250514', max_tokens: 600,
-      system: 'Ты тренер по Dota 2. 5 пунктов с эмодзи на русском. Коротко и конкретно.',
-      messages: [{ role: 'user', content: prompt }]
-    }, { headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
-    res.json({ text: data.content?.find(c => c.type === 'text')?.text || '' });
-  } catch (e) { res.status(500).json({ error: e.response?.data?.error?.message || e.message }); }
+    const p = process.env.USER_ENV_PATH;
+    if (p && fs.existsSync(p)) Object.assign(merged, require('dotenv').parse(fs.readFileSync(p)));
+  } catch { /* ignore */ }
+  return merged;
+}
+
+const AI_PROVIDERS = {
+  openai:   { label: 'ChatGPT (OpenAI)', envKey: 'OPENAI_API_KEY' },
+  gemini:   { label: 'Google Gemini',    envKey: 'GEMINI_API_KEY' },
+  deepseek: { label: 'DeepSeek',         envKey: 'DEEPSEEK_API_KEY' },
+};
+
+const prettyName = (n, pre) => (n && n !== 'empty' ? n.replace(pre, '').replace(/_/g, ' ') : null);
+
+// Hero lineups from the GSI draft block (when present).
+function parseDraft(draft) {
+  const out = { radiant: [], dire: [] };
+  if (!draft || typeof draft !== 'object') return out;
+  const teamOf = { team2: 'radiant', radiant: 'radiant', team3: 'dire', dire: 'dire' };
+  for (const k of Object.keys(draft)) {
+    const team = teamOf[k];
+    const sub = draft[k];
+    if (!team || !sub || typeof sub !== 'object') continue;
+    for (const f of Object.keys(sub)) {
+      if (/^pick\d+_id$/.test(f) && sub[f] && heroesCache[sub[f]]) out[team].push(heroesCache[sub[f]]);
+    }
+  }
+  return out;
+}
+
+// Build a rich, live context block for the AI from the current GSI snapshot.
+function buildAIContext() {
+  const s = currentState;
+  if (!s) return 'Матч сейчас не идёт — живых данных GSI нет.';
+  const map = s.map || {}, p = s.player || {}, h = s.hero || {}, d = s.derived || {};
+  const min = Math.floor((map.clock_time || 0) / 60);
+  const items = [];
+  for (let i = 0; i < 9; i++) { const n = prettyName((s.items || {})[`slot${i}`]?.name, /^item_/); if (n) items.push(n); }
+  const neutral = prettyName((s.items || {}).neutral0?.name, /^item_/);
+  const abilities = Object.keys(s.abilities || {}).filter(k => k.startsWith('ability'))
+    .map(k => { const a = s.abilities[k]; return a?.name ? `${a.name.replace(/_/g, ' ')} (ур.${a.level})` : null; }).filter(Boolean);
+  const t = parseDraft(s.draft);
+  const lines = [
+    `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${map.game_state || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
+    `Счёт: Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
+    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'}, уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
+    `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`,
+    `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
+    abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
+    (t.radiant.length || t.dire.length)
+      ? `Пики — Radiant: ${t.radiant.join(', ') || '?'}; Dire: ${t.dire.join(', ') || '?'}.`
+      : 'Составы команд GSI в обычном матче не отдаёт (только мои данные и пики из драфта). Опирайся на героев, названных в вопросе.',
+    'Точные предметы/статы союзников и врагов в реальном времени недоступны — используй знание Доты и пики.',
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+const SYSTEM_PROMPT =
+  'Ты — опытный тренер по Dota 2. Отвечай на русском, конкретно и кратко: списком, ' +
+  'с эмодзи. Учитывай контекст матча (минута, мои статы, предметы, пики). Для вопросов ' +
+  'про контр-пики и предметы называй конкретные айтемы/таланты и кратко почему. Если ' +
+  'данных мало — дай лучший совет по знанию Доты. Помни предыдущие сообщения диалога.';
+
+// Provider dispatch. `history` = [{role:'user'|'assistant', content}], newest last.
+async function callProvider(provider, key, system, history) {
+  if (provider === 'gemini') {
+    const contents = history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    const { data } = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`,
+      { systemInstruction: { parts: [{ text: system }] }, contents,
+        generationConfig: { maxOutputTokens: 800, temperature: 0.6 } },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 });
+    return data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '—';
+  }
+  // OpenAI & DeepSeek share the OpenAI chat-completions format.
+  const url = provider === 'deepseek'
+    ? 'https://api.deepseek.com/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+  const model = provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+  const { data } = await axios.post(url, {
+    model, max_tokens: 800, temperature: 0.6,
+    messages: [{ role: 'system', content: system }, ...history],
+  }, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, timeout: 30000 });
+  return data.choices?.[0]?.message?.content?.trim() || '—';
+}
+
+// Which provider is active + whether its key is set (for the UI badge).
+app.get('/ai/info', (req, res) => {
+  const env = userEnv();
+  const provider = AI_PROVIDERS[env.AI_PROVIDER] ? env.AI_PROVIDER : 'openai';
+  res.json({ provider, label: AI_PROVIDERS[provider].label, hasKey: !!env[AI_PROVIDERS[provider].envKey] });
 });
+
+// Chat endpoint. Body: { messages: [{role,content}, ...] } — full conversation.
+app.post('/ai', async (req, res) => {
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : null;
+  if (!messages || !messages.length) {
+    // Backward-compat: single question.
+    if (req.body?.question) return aiRespond(res, [{ role: 'user', content: String(req.body.question) }]);
+    return res.status(400).json({ error: 'Пустой запрос' });
+  }
+  return aiRespond(res, messages.slice(-20)); // keep last 20 turns of history
+});
+
+async function aiRespond(res, history) {
+  const env = userEnv();
+  const provider = AI_PROVIDERS[env.AI_PROVIDER] ? env.AI_PROVIDER : 'openai';
+  const key = env[AI_PROVIDERS[provider].envKey];
+  if (!key) {
+    return res.status(503).json({ error: `Ключ для «${AI_PROVIDERS[provider].label}» не задан — добавь его в настройках ⚙.` });
+  }
+  const system = `${SYSTEM_PROMPT}\n\nКОНТЕКСТ МАТЧА (актуальный):\n${buildAIContext()}`;
+  try {
+    const text = await callProvider(provider, key, system,
+      history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') })));
+    res.json({ text, provider });
+  } catch (e) {
+    res.status(500).json({ error: e.response?.data?.error?.message || e.message });
+  }
+}
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
