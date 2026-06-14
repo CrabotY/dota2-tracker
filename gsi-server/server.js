@@ -502,30 +502,66 @@ function buildAIContext() {
   const enemiesAll = [...seenHeroes.enemies]; // every enemy spotted so far
   const noMapData = !minimapEverSeen;
   const gs = map.game_state || '';
-  const isDraft = /HERO_SELECTION|STRATEGY_TIME|CUSTOM_GAME_SETUP/.test(gs);
+  const isPick = /HERO_SELECTION|CUSTOM_GAME_SETUP/.test(gs); // активный выбор героев
+  const isPregame = /STRATEGY_TIME|PRE_GAME/.test(gs);        // герой ВЫБРАН, закупка/выход
   const myTeam = p.team_name || (myTeamNum === 3 ? 'dire' : 'radiant');
+  const heroName_ = prettyName(h.name, /^npc_dota_hero_/);
   const draftLine = (t.radiant.picks.length || t.dire.picks.length || t.radiant.bans.length || t.dire.bans.length)
     ? `Пики — Radiant: ${t.radiant.picks.join(', ') || '—'}; Dire: ${t.dire.picks.join(', ') || '—'}.`
       + ` Баны — Radiant: ${t.radiant.bans.join(', ') || '—'}; Dire: ${t.dire.bans.join(', ') || '—'}.`
     : null;
 
-  const lines = isDraft ? [
-    `>>> ИДЁТ ВЫБОР ГЕРОЕВ (драфт). Моя команда: ${myTeam}. Помоги с пиком: контрпики против врага, синергия с союзниками, какая роль не закрыта, кого забанить. <<<`,
-    draftLine || 'Пики/баны пока не видны (возможно All Pick без структурированного драфта) — советуй по героям, которых назову, и по мете.',
-    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || 'ещё не выбран'}.`,
-  ] : [
-    `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${gs || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
-    `Счёт: Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
-    `Мой герой: ${prettyName(h.name, /^npc_dota_hero_/) || '?'} (${myTeam}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${h.alive === false ? 'МЁРТВ' : 'жив'}.`,
-    `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`,
-    `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
-    abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
+  // Death / buyback / status / aghs — для статы смерти и общего состояния.
+  const statusFlags = [['stunned','стан'],['silenced','сайленс'],['hexed','хекс'],['smoked','смок'],
+    ['disarmed','disarm'],['magicimmune','имун'],['break','брейк']].filter(([k]) => h[k]).map(([, l]) => l);
+  const deadInfo = h.alive === false
+    ? `МЁРТВ (респаун ${h.respawn_seconds ?? '?'}с)`
+    : 'жив';
+  const bb = (typeof h.buyback_cost === 'number' && h.buyback_cost > 0)
+    ? `; выкуп ${h.buyback_cost}з ${h.buyback_cooldown ? `(кд ${h.buyback_cooldown}с)` : '(готов)'}` : '';
+  const aghs = [h.aghanims_scepter && 'аган', h.aghanims_shard && 'шард'].filter(Boolean).join('+');
+  const heroLine = `Мой герой: ${heroName_ || '?'} (${myTeam}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${deadInfo}${bb}${aghs ? `, ${aghs}` : ''}${statusFlags.length ? `, эффекты: ${statusFlags.join(', ')}` : ''}.`;
+  const statsLine = `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}${p.kill_streak ? ` (килстрик ${p.kill_streak})` : ''}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`;
+  // Towers down (push/defend context).
+  const towers = (side) => { const g = (s.buildings || {})[side] || {}; let down = 0, total = 0;
+    for (const k of Object.keys(g)) if (/tower/.test(k)) { total++; if ((g[k].health || 0) <= 0) down++; } return `${down}/${total}`; };
+  const towersLine = s.buildings ? `Башни уничтожены — Radiant ${towers('radiant')}, Dire ${towers('dire')}.` : null;
+  const teamLines = [
     draftLine,
     alliesAll.length ? `Моя команда (союзники): ${alliesAll.join(', ')}.` : null,
     enemiesAll.length ? `Враги (замечены за матч): ${enemiesAll.join(', ')}.` : null,
     visibleEnemies.length ? `Прямо сейчас видны на карте враги: ${visibleEnemies.join(', ')}.` : null,
-    noMapData ? 'ВНИМАНИЕ: данные карты (minimap) не приходят — составы пока неизвестны. Если игрок назовёт героев врага в вопросе — советуй по ним.' : null,
+    noMapData ? 'Примечание: данные карты (minimap) пока не приходят — составы по мере появления. Если игрок назовёт героев врага — советуй по ним.' : null,
   ];
+
+  let lines;
+  if (isPick) {
+    lines = [
+      `>>> ИДЁТ ВЫБОР ГЕРОЕВ (драфт). Моя команда: ${myTeam}. Помоги с пиком: контрпики против врага, синергия с союзниками, какая роль не закрыта, кого забанить. <<<`,
+      draftLine || 'Пики/баны пока не видны (возможно All Pick) — советуй по героям, которых назову, и по мете.',
+      heroName_ ? `Я уже выбрал: ${heroName_}.` : 'Я ещё не выбрал героя.',
+      ...teamLines.filter(x => x && x !== draftLine),
+    ];
+  } else if (isPregame) {
+    lines = [
+      `>>> ФАЗА ${/STRATEGY/.test(gs) ? 'ЗАКУПКИ СТАРТОВЫХ ПРЕДМЕТОВ' : 'ПРЕ-ГЕЙМ (выход на лайн)'} — герой УЖЕ ВЫБРАН (${heroName_ || '?'}). Советуй стартовый билд, порядок прокачки скиллов и лайнинг, НЕ про выбор героя. <<<`,
+      heroLine,
+      `Мои предметы (стартовые): ${items.length ? items.join(', ') : 'пока нет'}.`,
+      abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
+      ...teamLines,
+    ];
+  } else {
+    lines = [
+      `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${gs || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
+      `Счёт (киллы): Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
+      heroLine,
+      statsLine,
+      `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
+      abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
+      towersLine,
+      ...teamLines,
+    ];
+  }
   return lines.filter(Boolean).join('\n');
 }
 
