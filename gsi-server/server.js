@@ -356,9 +356,11 @@ function accumulateSeenHeroes(body) {
   const myHero = body.hero?.name;
   for (const k of Object.keys(mm)) {
     const o = mm[k];
-    if (!o || !String(o.name || '').startsWith('npc_dota_hero_')) continue;
-    if (o.name === myHero) continue;
-    const hn = prettyName(o.name, /^npc_dota_hero_/);
+    // GSI puts the hero npc name in `unitname` (not `name`, which is a label).
+    const u = o && (o.unitname || o.name);
+    if (!u || !String(u).startsWith('npc_dota_hero_')) continue;
+    if (u === myHero) continue;
+    const hn = prettyName(u, /^npc_dota_hero_/);
     if (o.team === myTeamNum) seenHeroes.allies.add(hn);
     else if (o.team === 2 || o.team === 3) seenHeroes.enemies.add(hn);
   }
@@ -508,9 +510,10 @@ function buildAIContext() {
   const visibleEnemies = [];
   for (const k of Object.keys(mm)) {
     const o = mm[k];
-    if (!o || !String(o.name || '').startsWith('npc_dota_hero_')) continue;
+    const u = o && (o.unitname || o.name); // hero npc name lives in `unitname`
+    if (!u || !String(u).startsWith('npc_dota_hero_')) continue;
     if (o.team !== myTeamNum && (o.team === 2 || o.team === 3)) {
-      const hn = prettyName(o.name, /^npc_dota_hero_/);
+      const hn = prettyName(u, /^npc_dota_hero_/);
       if (!visibleEnemies.includes(hn)) visibleEnemies.push(hn);
     }
   }
@@ -555,7 +558,7 @@ function buildAIContext() {
   let posLine = null;
   for (const k of Object.keys(mm)) {
     const o = mm[k];
-    if (o && o.name === h.name && typeof o.xpos === 'number' && typeof o.ypos === 'number') {
+    if (o && (o.unitname || o.name) === h.name && typeof o.xpos === 'number' && typeof o.ypos === 'number') {
       const nx = (o.xpos + 8200) / 16400, ny = (o.ypos + 8200) / 16400, sum = nx + ny;
       const lane = Math.abs(nx - ny) < 0.18 ? 'мид' : (ny > nx ? 'топ' : 'бот');
       const ownLow = myTeam !== 'dire';

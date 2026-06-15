@@ -125,9 +125,10 @@ function renderMinimap(minimap, myHeroName, myTeam) {
     if (!o || typeof o.xpos !== 'number' || typeof o.ypos !== 'number') continue;
     const left = Math.max(0, Math.min(100, (o.xpos - WORLD_MIN) / WORLD_RANGE * 100));
     const top = Math.max(0, Math.min(100, (1 - (o.ypos - WORLD_MIN) / WORLD_RANGE) * 100));
-    const isHero = String(o.name || '').startsWith('npc_dota_hero_');
+    const unit = o.unitname || o.name || ''; // hero npc name is in `unitname`
+    const isHero = String(unit).startsWith('npc_dota_hero_');
     let cls;
-    if (isHero && o.name === myHeroName) cls = 'mm-dot mm-hero mm-me';
+    if (isHero && unit === myHeroName) cls = 'mm-dot mm-hero mm-me';
     else if (o.team === myTeamNum) cls = isHero ? 'mm-dot mm-hero mm-ally' : 'mm-dot mm-ally';
     else if (o.team === 2 || o.team === 3) cls = isHero ? 'mm-dot mm-hero mm-enemy' : 'mm-dot mm-enemy';
     else cls = 'mm-dot mm-neutral';
