@@ -481,10 +481,26 @@ function buildAIContext() {
   const map = s.map || {}, p = s.player || {}, h = s.hero || {}, d = s.derived || {};
   const min = Math.floor((map.clock_time || 0) / 60);
   const items = [];
-  for (let i = 0; i < 9; i++) { const n = prettyName((s.items || {})[`slot${i}`]?.name, /^item_/); if (n) items.push(n); }
+  for (let i = 0; i < 9; i++) {
+    const it = (s.items || {})[`slot${i}`];
+    if (!it || !it.name || it.name === 'empty') continue;
+    const nm = prettyName(it.name, /^item_/);
+    items.push(it.cooldown > 0 ? `${nm} (КД ${Math.ceil(it.cooldown)}с)` : nm);
+  }
   const neutral = prettyName((s.items || {}).neutral0?.name, /^item_/);
-  const abilities = Object.keys(s.abilities || {}).filter(k => k.startsWith('ability'))
-    .map(k => { const a = s.abilities[k]; return a?.name ? `${a.name.replace(/_/g, ' ')} (ур.${a.level})` : null; }).filter(Boolean);
+  // Abilities with cooldown/ready + ultimate flag; talents pulled out separately.
+  const abilities = [], talents = [];
+  for (const k of Object.keys(s.abilities || {})) {
+    const a = s.abilities[k];
+    if (!a || !a.name) continue;
+    if (a.name.startsWith('special_bonus_')) {
+      if (a.level > 0) talents.push(a.name.replace(/^special_bonus_/, '').replace(/_/g, ' '));
+      continue;
+    }
+    if (!k.startsWith('ability')) continue;
+    const cd = a.cooldown > 0 ? `КД ${Math.ceil(a.cooldown)}с` : (a.passive ? 'пассив' : 'готов');
+    abilities.push(`${a.name.replace(/_/g, ' ')}${a.ultimate ? ' [ULT]' : ''} (ур.${a.level}, ${cd})`);
+  }
   const t = parseDraft(s.draft);
   // Currently-visible enemies (this snapshot) + the accumulated match lineup.
   const mm = s.minimap || {};
@@ -522,10 +538,62 @@ function buildAIContext() {
   const aghs = [h.aghanims_scepter && 'аган', h.aghanims_shard && 'шард'].filter(Boolean).join('+');
   const heroLine = `Мой герой: ${heroName_ || '?'} (${myTeam}), уровень ${h.level ?? '?'}, HP ${h.health ?? '?'}/${h.max_health ?? '?'}, мана ${h.mana ?? '?'}/${h.max_mana ?? '?'}, ${deadInfo}${bb}${aghs ? `, ${aghs}` : ''}${statusFlags.length ? `, эффекты: ${statusFlags.join(', ')}` : ''}.`;
   const statsLine = `Мои статы: KDA ${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}${p.kill_streak ? ` (килстрик ${p.kill_streak})` : ''}, ЛХ ${p.last_hits ?? 0}, денаи ${p.denies ?? 0}, GPM ${p.gpm ?? 0}, XPM ${p.xpm ?? 0}, золото ${p.gold ?? 0}, нетворс ${d.netWorth ?? p.net_worth ?? 0}.`;
-  // Towers down (push/defend context).
-  const towers = (side) => { const g = (s.buildings || {})[side] || {}; let down = 0, total = 0;
-    for (const k of Object.keys(g)) if (/tower/.test(k)) { total++; if ((g[k].health || 0) <= 0) down++; } return `${down}/${total}`; };
-  const towersLine = s.buildings ? `Башни уничтожены — Radiant ${towers('radiant')}, Dire ${towers('dire')}.` : null;
+  const talentsLine = talents.length ? `Взятые таланты: ${talents.join('; ')}.` : null;
+
+  // Buildings: towers + racks + ancient HP (push/defend context).
+  const countDown = (side, re) => { const g = (s.buildings || {})[side] || {}; let down = 0, total = 0;
+    for (const k of Object.keys(g)) if (re.test(k)) { total++; if ((g[k].health || 0) <= 0) down++; } return `${down}/${total}`; };
+  const ancientHp = (side) => { const g = (s.buildings || {})[side] || {};
+    for (const k of Object.keys(g)) if (/fort|ancient/.test(k)) return g[k].max_health ? Math.round((g[k].health / g[k].max_health) * 100) : null;
+    return null; };
+  const towersLine = s.buildings ? `Башни уничтожены — Radiant ${countDown('radiant', /tower/)}, Dire ${countDown('dire', /tower/)}.` : null;
+  const racksLine = s.buildings ? `Казармы снесены — Radiant ${countDown('radiant', /rax/)}, Dire ${countDown('dire', /rax/)}.` : null;
+  const ancientLine = (s.buildings && (ancientHp('radiant') !== null || ancientHp('dire') !== null))
+    ? `HP трона — Radiant ${ancientHp('radiant') ?? '?'}%, Dire ${ancientHp('dire') ?? '?'}%.` : null;
+
+  // My position → rough lane / side, from the minimap.
+  let posLine = null;
+  for (const k of Object.keys(mm)) {
+    const o = mm[k];
+    if (o && o.name === h.name && typeof o.xpos === 'number' && typeof o.ypos === 'number') {
+      const nx = (o.xpos + 8200) / 16400, ny = (o.ypos + 8200) / 16400, sum = nx + ny;
+      const lane = Math.abs(nx - ny) < 0.18 ? 'мид' : (ny > nx ? 'топ' : 'бот');
+      const ownLow = myTeam !== 'dire';
+      const side = (ownLow ? sum < 0.85 : sum > 1.15) ? 'на своей половине'
+        : (ownLow ? sum > 1.15 : sum < 0.85) ? 'на вражеской половине' : 'в центре карты';
+      posLine = `Моя позиция: примерно ${lane}-лайн, ${side}.`;
+      break;
+    }
+  }
+
+  // Roshan timer (only if this GSI version provides it).
+  const roshLine = (map.roshan_state || typeof map.roshan_state_end_seconds === 'number')
+    ? `Рошан: ${map.roshan_state === 'alive' ? 'жив' : map.roshan_state === 'dead'
+        ? `мёртв, респаун ~${map.roshan_state_end_seconds ?? '?'}с` : map.roshan_state}.` : null;
+
+  // Economy detail + death economy (fields present only in some GSI versions).
+  const ecoBits = [];
+  if (typeof p.gold_reliable === 'number') ecoBits.push(`надёжное ${p.gold_reliable}`);
+  if (typeof p.gold_unreliable === 'number') ecoBits.push(`ненадёжное ${p.gold_unreliable}`);
+  if (typeof p.gold_lost_to_death === 'number') ecoBits.push(`потеряно на смертях ${p.gold_lost_to_death}`);
+  if (typeof p.gold_spent_on_buybacks === 'number') ecoBits.push(`на выкупы ${p.gold_spent_on_buybacks}`);
+  const ecoLine = ecoBits.length ? `Экономика: ${ecoBits.join(', ')}.` : null;
+
+  // Wards / runes / camps.
+  const visionBits = [];
+  if (typeof p.wards_purchased === 'number') visionBits.push(`варды куплено ${p.wards_purchased}`);
+  if (typeof p.wards_placed === 'number') visionBits.push(`поставлено ${p.wards_placed}`);
+  if (typeof p.wards_destroyed === 'number') visionBits.push(`снято ${p.wards_destroyed}`);
+  if (typeof p.runes_activated === 'number') visionBits.push(`рун собрано ${p.runes_activated}`);
+  if (typeof p.camps_stacked === 'number') visionBits.push(`лагерей застакано ${p.camps_stacked}`);
+  const visionLine = visionBits.length ? `Варды/фарм: ${visionBits.join(', ')}.` : null;
+
+  // Enemy wards currently visible on the minimap.
+  let enemyWards = 0;
+  for (const k of Object.keys(mm)) { const o = mm[k];
+    if (o && /ward/i.test(o.image || '') && (o.team === 2 || o.team === 3) && o.team !== myTeamNum) enemyWards++; }
+  const enemyWardLine = enemyWards ? `Видно вражеских вардов на карте: ${enemyWards}.` : null;
+
   const teamLines = [
     draftLine,
     alliesAll.length ? `Моя команда (союзники): ${alliesAll.join(', ')}.` : null,
@@ -555,10 +623,18 @@ function buildAIContext() {
       `Минута: ${min} (clock ${map.clock_time || 0}s), фаза ${gs || '?'}, ${map.daytime ? 'день' : 'ночь'}.`,
       `Счёт (киллы): Radiant ${map.radiant_score ?? '?'}—${map.dire_score ?? '?'} Dire.`,
       heroLine,
+      posLine,
       statsLine,
+      ecoLine,
       `Мои предметы: ${items.length ? items.join(', ') : 'нет'}${neutral ? `; нейтрал: ${neutral}` : ''}.`,
       abilities.length ? `Мои способности: ${abilities.join(', ')}.` : null,
+      talentsLine,
       towersLine,
+      racksLine,
+      ancientLine,
+      roshLine,
+      visionLine,
+      enemyWardLine,
       ...teamLines,
     ];
   }
@@ -567,7 +643,10 @@ function buildAIContext() {
 
 const SYSTEM_PROMPT =
   'Ты — опытный тренер по Dota 2. Отвечай на русском, уверенно, конкретно и кратко: ' +
-  'списком, с эмодзи. Учитывай контекст матча (минута, мои статы, предметы, пики). ' +
+  'списком, с эмодзи. Учитывай ВЕСЬ контекст матча: минута, мои статы и экономика, ' +
+  'предметы и их кулдауны, кулдауны способностей и готовность ультимейта, мои таланты, ' +
+  'моя позиция на карте, состояние башен/казарм/трона, Рошан, пики и составы. Для ' +
+  'решений «бить или отступать» опирайся на готовность ульта/предметов и позицию. ' +
   'Про контр-пики и предметы называй конкретные айтемы/таланты и кратко почему. ' +
   'ВАЖНО: если в вопросе или пиках назван герой врага — сразу давай по нему чёткий ' +
   'совет по знанию Доты (предметы, тайминги, как играть). НЕ пиши, что у тебя нет ' +
